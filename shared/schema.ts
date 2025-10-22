@@ -76,7 +76,6 @@ export const locomotiveSchema = z.object({
   health: z.number().min(0).max(100).default(100), // 100 = perfect, 0 = needs scrapping
   paintCondition: z.number().min(0).max(100).default(100),
   paintSchemeId: z.string().optional(), // Reference to paint scheme
-  heritagePaintSchemeId: z.string().optional(), // Reference to heritage paint scheme (exclusive)
   specialLiveryId: z.string().optional(), // Reference to special livery (challenge-only, like Alpha livery)
   previousOwnerName: z.string().optional(), // For used locomotives - previous company name
   isPatched: z.boolean().optional(), // True if paint was patched instead of fully repainted
@@ -148,30 +147,6 @@ export const SPECIAL_LIVERIES_CATALOG: Omit<SpecialLivery, 'isUnlocked' | 'appli
 ];
 
 // ============================================================================
-// HERITAGE PAINT SCHEMES (CUSTOM USER-CREATED)
-// ============================================================================
-
-export const heritagePaintSchemeSchema = z.object({
-  id: z.string(),
-  name: z.string().min(1).max(50),
-  description: z.string().optional(),
-  primaryColor: z.string(), // hex color
-  secondaryColor: z.string(), // hex color
-  accentColor: z.string().optional(), // hex color
-  stripePattern: z.enum(["solid", "striped", "checkered", "custom"]).default("solid"),
-  purchaseCost: z.number().int().positive(), // 500,000 cash
-  pointsCost: z.number().int().positive(), // 100-150 points
-  levelRequired: z.number().int().min(25).default(25), // Level 25 minimum
-  isPurchased: z.boolean().default(false),
-  appliedToLocoId: z.string().optional(), // Which locomotive has this heritage scheme
-  createdAt: z.number(),
-});
-
-export const insertHeritagePaintSchemeSchema = heritagePaintSchemeSchema.omit({ id: true, createdAt: true, isPurchased: true });
-export type HeritagePaintScheme = z.infer<typeof heritagePaintSchemeSchema>;
-export type InsertHeritagePaintScheme = z.infer<typeof insertHeritagePaintSchemeSchema>;
-
-// ============================================================================
 // ACHIEVEMENT SYSTEM
 // ============================================================================
 
@@ -188,7 +163,6 @@ export const achievementSchema = z.object({
   rewards: z.object({
     cash: z.number().int().default(0),
     points: z.number().int().default(0),
-    heritagePaintSchemeId: z.string().optional(), // For special event rewards
   }),
   expiresAt: z.number().optional(), // For weekly and event achievements
   createdAt: z.number(),
@@ -332,7 +306,6 @@ export const playerDataSchema = z.object({
   jobs: z.array(jobSchema).default([]),
   marketData: marketDataSchema.optional(), // supply/demand tracking
   paintSchemes: z.array(paintSchemeSchema).default([]), // custom paint schemes
-  heritagePaintSchemes: z.array(heritagePaintSchemeSchema).default([]), // Custom user-created heritage schemes
   specialLiveries: z.array(specialLiverySchema).default([]), // Challenge-only special liveries (Alpha, etc.)
   achievements: z.array(achievementSchema).default([]), // All achievements (weekly, career, event)
   weeklyAchievementsRefreshAt: z.number().optional(), // Timestamp for next weekly achievements refresh
@@ -1474,7 +1447,7 @@ export function generateEventAchievements(): Achievement[] {
       targetValue: 250,
       currentProgress: 0,
       isCompleted: false,
-      rewards: { cash: 500000, points: 200, heritagePaintSchemeId: "alpha_livery" },
+      rewards: { cash: 500000, points: 200 },
       expiresAt: alphaEndDate,
     },
   ];
@@ -1502,85 +1475,3 @@ export function shouldRefreshWeeklyAchievements(refreshAt?: number): boolean {
   if (!refreshAt) return true;
   return Date.now() >= refreshAt;
 }
-
-// ============================================================================
-// HERITAGE PAINT SCHEMES CATALOG (NOW EMPTY - USERS CREATE THEIR OWN)
-// ============================================================================
-
-// Heritage schemes are now custom user-created designs
-// Users pay to create their own heritage liveries with custom colors and names
-// Cost to create: $500,000 + 100-150 points
-export const HERITAGE_CREATION_COST = {
-  CASH: 500000,
-  POINTS: 100,
-  LEVEL_REQUIRED: 25,
-};
-
-export const HERITAGE_PAINT_SCHEMES_CATALOG: Omit<HeritagePaintScheme, 'createdAt' | 'isPurchased' | 'appliedToLocoId'>[] = [
-  // Legacy catalog removed - users now create their own
-  // Keeping this as empty array for backward compatibility
-];
-
-// Legacy pre-made schemes (for reference only, not used anymore)
-const LEGACY_HERITAGE_SCHEMES = [
-  {
-    id: "heritage_blue_gold",
-    name: "Heritage Blue & Gold",
-    description: "Classic railroad heritage scheme with royal blue and gold accents",
-    primaryColor: "#1e40af",
-    secondaryColor: "#fbbf24",
-    accentColor: "#ffffff",
-    stripePattern: "striped",
-    purchaseCost: 500000,
-    pointsCost: 100,
-    levelRequired: 25,
-  },
-  {
-    id: "heritage_crimson_express",
-    name: "Heritage Crimson Express",
-    description: "Bold crimson and silver heritage livery",
-    primaryColor: "#991b1b",
-    secondaryColor: "#d1d5db",
-    accentColor: "#1f2937",
-    stripePattern: "striped",
-    purchaseCost: 500000,
-    pointsCost: 125,
-    levelRequired: 25,
-  },
-  {
-    id: "heritage_forest_green",
-    name: "Heritage Forest Green",
-    description: "Deep forest green with cream accents, classic American railroad style",
-    primaryColor: "#14532d",
-    secondaryColor: "#fef3c7",
-    accentColor: "#78350f",
-    stripePattern: "striped",
-    purchaseCost: 500000,
-    pointsCost: 110,
-    levelRequired: 25,
-  },
-  {
-    id: "heritage_sunset_limited",
-    name: "Heritage Sunset Limited",
-    description: "Warm orange and yellow sunset-inspired heritage scheme",
-    primaryColor: "#ea580c",
-    secondaryColor: "#fde047",
-    accentColor: "#7c2d12",
-    stripePattern: "custom",
-    purchaseCost: 500000,
-    pointsCost: 150,
-    levelRequired: 25,
-  },
-  {
-    id: "heritage_black_diamond",
-    name: "Heritage Black Diamond",
-    description: "Sleek black with silver and red accents, premium heritage design",
-    primaryColor: "#0f172a",
-    secondaryColor: "#e5e7eb",
-    accentColor: "#dc2626",
-    stripePattern: "custom",
-    purchaseCost: 500000,
-    pointsCost: 150,
-    levelRequired: 25,
-  },
-];

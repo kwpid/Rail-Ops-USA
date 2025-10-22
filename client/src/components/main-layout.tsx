@@ -48,7 +48,6 @@ const menuItems = [
   { title: "Shop", icon: Store, path: "/shop" },
   { title: "Loaner Trains", icon: ShoppingCart, path: "/loaner-trains" },
   { title: "Achievements", icon: Trophy, path: "/achievements" },
-  { title: "Heritage Schemes", icon: Sparkles, path: "/heritage-schemes" },
   { title: "News", icon: Newspaper, path: "/news" },
 ];
 

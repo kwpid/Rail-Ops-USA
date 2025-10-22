@@ -8,7 +8,7 @@ import {
 import { doc, getDoc, setDoc, onSnapshot } from "firebase/firestore";
 import { getAuthOrThrow, getGoogleProviderOrThrow, getDbOrThrow, firebaseConfigured } from "@/lib/firebase";
 import type { PlayerData, Achievement } from "@shared/schema";
-import { generateWeeklyAchievements, generateCareerAchievements, generateEventAchievements, HERITAGE_PAINT_SCHEMES_CATALOG, SPECIAL_LIVERIES_CATALOG, getNextFriday, shouldRefreshWeeklyAchievements } from "@shared/schema";
+import { generateWeeklyAchievements, generateCareerAchievements, generateEventAchievements, SPECIAL_LIVERIES_CATALOG, getNextFriday, shouldRefreshWeeklyAchievements } from "@shared/schema";
 
 interface AuthContextType {
   user: FirebaseUser | null;
@@ -65,31 +65,26 @@ function normalizePlayerData(data: Partial<PlayerData>, userId: string): PlayerD
     locomotives: data.locomotives || [],
     jobs: data.jobs || [],
     paintSchemes: data.paintSchemes || [],
-    heritagePaintSchemes: data.heritagePaintSchemes || [],
     specialLiveries: (() => {
-      // Migration: Check if Alpha livery exists in legacy heritage schemes
-      const legacyAlphaHeritage = (data.heritagePaintSchemes || []).find((s: any) => s.id === "alpha_livery");
-      const hasAlphaInSpecial = (data.specialLiveries || []).find((s: any) => s.id === "alpha_livery");
+      const legacyHeritage = (data as any).heritagePaintSchemes;
+      const legacyAlpha = legacyHeritage?.find((s: any) => s.id === "alpha_livery");
       
       if (data.specialLiveries) {
-        // If special liveries exist, use them
-        if (legacyAlphaHeritage && legacyAlphaHeritage.isPurchased && !hasAlphaInSpecial?.isUnlocked) {
-          // Migrate legacy Alpha from heritage to special liveries
+        if (legacyAlpha?.isPurchased) {
           return data.specialLiveries.map((s: any) => 
-            s.id === "alpha_livery" 
-              ? { ...s, isUnlocked: true, appliedToLocoId: legacyAlphaHeritage.appliedToLocoId, unlockedAt: legacyAlphaHeritage.createdAt }
+            s.id === "alpha_livery" && !s.isUnlocked
+              ? { ...s, isUnlocked: true, appliedToLocoId: legacyAlpha.appliedToLocoId, unlockedAt: legacyAlpha.createdAt }
               : s
           );
         }
         return data.specialLiveries;
       }
       
-      // Initialize special liveries from catalog
       return SPECIAL_LIVERIES_CATALOG.map(livery => ({
         ...livery,
-        isUnlocked: legacyAlphaHeritage?.isPurchased || false,
-        appliedToLocoId: legacyAlphaHeritage?.appliedToLocoId,
-        unlockedAt: legacyAlphaHeritage?.createdAt,
+        isUnlocked: livery.id === "alpha_livery" && legacyAlpha?.isPurchased ? true : false,
+        appliedToLocoId: livery.id === "alpha_livery" ? legacyAlpha?.appliedToLocoId : undefined,
+        unlockedAt: livery.id === "alpha_livery" ? legacyAlpha?.createdAt : undefined,
       }));
     })(),
     achievements: data.achievements || [
@@ -199,7 +194,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           locomotives: [],
           jobs: [],
           paintSchemes: [],
-          heritagePaintSchemes: [],
           specialLiveries: SPECIAL_LIVERIES_CATALOG.map(livery => ({
             ...livery,
             isUnlocked: false,

@@ -143,12 +143,6 @@ export default function AchievementsPage() {
                     {achievement.rewards.points} points
                   </div>
                 )}
-                {achievement.rewards.heritagePaintSchemeId && (
-                  <div className="flex items-center gap-1 text-purple-600 dark:text-purple-400" data-testid={`reward-heritage-${achievement.id}`}>
-                    <Trophy className="h-4 w-4" />
-                    Heritage Livery
-                  </div>
-                )}
               </div>
 
               {isComplete && !isClaimed && (
