@@ -1,6 +1,26 @@
 import { z } from "zod";
 
 // ============================================================================
+// UUID GENERATION (CROSS-PLATFORM)
+// ============================================================================
+
+function generateUUID(): string {
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+    return crypto.randomUUID();
+  }
+  
+  if (typeof self !== 'undefined' && self.crypto && self.crypto.randomUUID) {
+    return self.crypto.randomUUID();
+  }
+  
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+    const r = Math.random() * 16 | 0;
+    const v = c === 'x' ? r : (r & 0x3 | 0x8);
+    return v.toString(16);
+  });
+}
+
+// ============================================================================
 // PLAYER & COMPANY SCHEMAS
 // ============================================================================
 
@@ -1001,7 +1021,7 @@ export function generateLoanerTrain(catalogItem: LocomotiveCatalogItem): LoanerT
   const previousOwnerColors = RAILROAD_PAINT_SCHEMES[Math.floor(Math.random() * RAILROAD_PAINT_SCHEMES.length)];
   
   return {
-    id: crypto.randomUUID(),
+    id: generateUUID(),
     catalogItem,
     usedPrice,
     mileage,
@@ -1154,7 +1174,7 @@ export function generateWeeklyAchievements(): Achievement[] {
   
   return weeklyTasks.map(task => ({
     ...task,
-    id: crypto.randomUUID(),
+    id: generateUUID(),
     createdAt: now,
   }));
 }
@@ -1368,7 +1388,7 @@ export function generateCareerAchievements(): Achievement[] {
   
   return careerMilestones.map(milestone => ({
     ...milestone,
-    id: crypto.randomUUID(),
+    id: generateUUID(),
     createdAt: now,
   }));
 }
@@ -1427,7 +1447,7 @@ export function generateEventAchievements(): Achievement[] {
   
   return eventChallenges.map(challenge => ({
     ...challenge,
-    id: crypto.randomUUID(),
+    id: generateUUID(),
     createdAt: now,
   }));
 }
