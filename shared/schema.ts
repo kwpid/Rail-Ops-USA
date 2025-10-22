@@ -26,6 +26,8 @@ export const playerStatsSchema = z.object({
   xp: z.number().default(0),
   level: z.number().default(1),
   nextLocoId: z.number().default(2), // starts at 2 since starter loco is #0001
+  points: z.number().default(10), // New Points currency for achievements
+  totalJobsCompleted: z.number().default(0), // Track total jobs for career achievements
 });
 
 // ============================================================================
@@ -54,6 +56,7 @@ export const locomotiveSchema = z.object({
   health: z.number().min(0).max(100).default(100), // 100 = perfect, 0 = needs scrapping
   paintCondition: z.number().min(0).max(100).default(100),
   paintSchemeId: z.string().optional(), // Reference to paint scheme
+  heritagePaintSchemeId: z.string().optional(), // Reference to heritage paint scheme (exclusive)
   previousOwnerName: z.string().optional(), // For used locomotives - previous company name
   isPatched: z.boolean().optional(), // True if paint was patched instead of fully repainted
   status: z.enum(["available", "assigned", "needs_repair", "in_paint_shop", "stored"]).default("available"),
@@ -89,6 +92,63 @@ export const PAINT_COSTS = {
   PATCH_COST: 800, // $800 to patch logos/numbers (cheap alternative)
   DOWNTIME_MINUTES: 10, // 10 minutes out of service for full paint
   PATCH_DOWNTIME_MINUTES: 2, // 2 minutes for patching
+};
+
+// ============================================================================
+// HERITAGE / SPECIAL PAINT SCHEMES
+// ============================================================================
+
+export const heritagePaintSchemeSchema = z.object({
+  id: z.string(),
+  name: z.string().min(1).max(50),
+  description: z.string().optional(),
+  primaryColor: z.string(), // hex color
+  secondaryColor: z.string(), // hex color
+  accentColor: z.string().optional(), // hex color
+  stripePattern: z.enum(["solid", "striped", "checkered", "custom"]).default("solid"),
+  purchaseCost: z.number().int().positive(), // 500,000 cash
+  pointsCost: z.number().int().positive(), // 100-150 points
+  levelRequired: z.number().int().min(25).default(25), // Level 25 minimum
+  isPurchased: z.boolean().default(false),
+  appliedToLocoId: z.string().optional(), // Which locomotive has this heritage scheme
+  createdAt: z.number(),
+});
+
+export const insertHeritagePaintSchemeSchema = heritagePaintSchemeSchema.omit({ id: true, createdAt: true, isPurchased: true });
+export type HeritagePaintScheme = z.infer<typeof heritagePaintSchemeSchema>;
+export type InsertHeritagePaintScheme = z.infer<typeof insertHeritagePaintSchemeSchema>;
+
+// ============================================================================
+// ACHIEVEMENT SYSTEM
+// ============================================================================
+
+export const achievementSchema = z.object({
+  id: z.string(),
+  type: z.enum(["weekly", "career", "event"]),
+  title: z.string(),
+  description: z.string(),
+  requirement: z.string(), // e.g., "complete_intermodal_jobs_5"
+  targetValue: z.number().int().positive(), // e.g., 5 jobs
+  currentProgress: z.number().int().default(0),
+  isCompleted: z.boolean().default(false),
+  completedAt: z.number().optional(),
+  rewards: z.object({
+    cash: z.number().int().default(0),
+    points: z.number().int().default(0),
+    heritagePaintSchemeId: z.string().optional(), // For special event rewards
+  }),
+  expiresAt: z.number().optional(), // For weekly and event achievements
+  createdAt: z.number(),
+});
+
+export const insertAchievementSchema = achievementSchema.omit({ id: true, createdAt: true, currentProgress: true, isCompleted: true, completedAt: true });
+export type Achievement = z.infer<typeof achievementSchema>;
+export type InsertAchievement = z.infer<typeof insertAchievementSchema>;
+
+// Points redemption costs
+export const POINTS_COSTS = {
+  AUTO_COMPLETE_JOB: 10, // Auto-complete a single job
+  AUTO_COMPLETE_PAINT: 5, // Auto-complete all paint jobs
 };
 
 // ============================================================================
@@ -219,6 +279,9 @@ export const playerDataSchema = z.object({
   jobs: z.array(jobSchema).default([]),
   marketData: marketDataSchema.optional(), // supply/demand tracking
   paintSchemes: z.array(paintSchemeSchema).default([]), // custom paint schemes
+  heritagePaintSchemes: z.array(heritagePaintSchemeSchema).default([]), // Heritage/special paint schemes
+  achievements: z.array(achievementSchema).default([]), // All achievements (weekly, career, event)
+  weeklyAchievementsRefreshAt: z.number().optional(), // Timestamp for next weekly achievements refresh
   loanerTrains: z.array(loanerTrainSchema).default([]), // Dynamic used locomotive marketplace
   loanerTrainsRefreshAt: z.number().optional(), // Timestamp for next loaner refresh (synced with jobs)
 });
@@ -966,3 +1029,501 @@ export function generateLoanerTrainMarket(count?: number): LoanerTrain[] {
   // Sort by price (cheapest first)
   return loanerTrains.sort((a, b) => a.usedPrice - b.usedPrice);
 }
+
+// ============================================================================
+// ACHIEVEMENT GENERATION
+// ============================================================================
+
+// Weekly Achievements (10 challenges, resets every Friday @ 12 PM)
+export function generateWeeklyAchievements(): Achievement[] {
+  const now = Date.now();
+  const nextFriday = getNextFriday();
+  
+  const weeklyTasks: Omit<Achievement, 'id' | 'createdAt'>[] = [
+    {
+      type: "weekly",
+      title: "Intermodal Specialist",
+      description: "Complete 5 Intermodal Jobs",
+      requirement: "complete_intermodal_jobs",
+      targetValue: 5,
+      currentProgress: 0,
+      isCompleted: false,
+      rewards: { cash: 7500, points: 5 },
+      expiresAt: nextFriday,
+    },
+    {
+      type: "weekly",
+      title: "Local Hero",
+      description: "Complete 15 Local Freight Jobs",
+      requirement: "complete_local_freight_jobs",
+      targetValue: 15,
+      currentProgress: 0,
+      isCompleted: false,
+      rewards: { cash: 10000, points: 0 },
+      expiresAt: nextFriday,
+    },
+    {
+      type: "weekly",
+      title: "Mainline Master",
+      description: "Complete 5 Mainline Jobs",
+      requirement: "complete_mainline_jobs",
+      targetValue: 5,
+      currentProgress: 0,
+      isCompleted: false,
+      rewards: { cash: 15000, points: 0 },
+      expiresAt: nextFriday,
+    },
+    {
+      type: "weekly",
+      title: "Coal Runner",
+      description: "Complete 3 Coal Jobs",
+      requirement: "complete_coal_jobs",
+      targetValue: 3,
+      currentProgress: 0,
+      isCompleted: false,
+      rewards: { cash: 8000, points: 3 },
+      expiresAt: nextFriday,
+    },
+    {
+      type: "weekly",
+      title: "Chemical Hauler",
+      description: "Complete 2 Chemical Jobs",
+      requirement: "complete_chemical_jobs",
+      targetValue: 2,
+      currentProgress: 0,
+      isCompleted: false,
+      rewards: { cash: 12000, points: 5 },
+      expiresAt: nextFriday,
+    },
+    {
+      type: "weekly",
+      title: "Quick Turnaround",
+      description: "Complete 10 Jobs in total",
+      requirement: "complete_total_jobs",
+      targetValue: 10,
+      currentProgress: 0,
+      isCompleted: false,
+      rewards: { cash: 20000, points: 10 },
+      expiresAt: nextFriday,
+    },
+    {
+      type: "weekly",
+      title: "Distance Driver",
+      description: "Complete jobs totaling 500 miles",
+      requirement: "complete_miles_total",
+      targetValue: 500,
+      currentProgress: 0,
+      isCompleted: false,
+      rewards: { cash: 15000, points: 8 },
+      expiresAt: nextFriday,
+    },
+    {
+      type: "weekly",
+      title: "Grain Hauler",
+      description: "Complete 4 Grain Jobs",
+      requirement: "complete_grain_jobs",
+      targetValue: 4,
+      currentProgress: 0,
+      isCompleted: false,
+      rewards: { cash: 9000, points: 4 },
+      expiresAt: nextFriday,
+    },
+    {
+      type: "weekly",
+      title: "Yard Master",
+      description: "Complete 8 Yard Switching Jobs",
+      requirement: "complete_yard_switching_jobs",
+      targetValue: 8,
+      currentProgress: 0,
+      isCompleted: false,
+      rewards: { cash: 6000, points: 3 },
+      expiresAt: nextFriday,
+    },
+    {
+      type: "weekly",
+      title: "Big Week",
+      description: "Complete 25 Jobs this week",
+      requirement: "complete_total_jobs",
+      targetValue: 25,
+      currentProgress: 0,
+      isCompleted: false,
+      rewards: { cash: 50000, points: 25 },
+      expiresAt: nextFriday,
+    },
+  ];
+  
+  return weeklyTasks.map(task => ({
+    ...task,
+    id: crypto.randomUUID(),
+    createdAt: now,
+  }));
+}
+
+// Career Achievements (20+ permanent milestones)
+export function generateCareerAchievements(): Achievement[] {
+  const now = Date.now();
+  
+  const careerMilestones: Omit<Achievement, 'id' | 'createdAt'>[] = [
+    {
+      type: "career",
+      title: "Getting Started",
+      description: "Complete your first job",
+      requirement: "total_jobs_completed",
+      targetValue: 1,
+      currentProgress: 0,
+      isCompleted: false,
+      rewards: { cash: 5000, points: 5 },
+    },
+    {
+      type: "career",
+      title: "Small Business",
+      description: "Have $100,000 or more in your account",
+      requirement: "cash_balance",
+      targetValue: 100000,
+      currentProgress: 0,
+      isCompleted: false,
+      rewards: { cash: 0, points: 10 },
+    },
+    {
+      type: "career",
+      title: "Millionaire",
+      description: "Have $1,000,000 or more in your account",
+      requirement: "cash_balance",
+      targetValue: 1000000,
+      currentProgress: 0,
+      isCompleted: false,
+      rewards: { cash: 0, points: 50 },
+    },
+    {
+      type: "career",
+      title: "Tycoon",
+      description: "Have $10,000,000 or more in your account",
+      requirement: "cash_balance",
+      targetValue: 10000000,
+      currentProgress: 0,
+      isCompleted: false,
+      rewards: { cash: 0, points: 250 },
+    },
+    {
+      type: "career",
+      title: "Veteran Railroader",
+      description: "Complete 100 jobs total",
+      requirement: "total_jobs_completed",
+      targetValue: 100,
+      currentProgress: 0,
+      isCompleted: false,
+      rewards: { cash: 100000, points: 50 },
+    },
+    {
+      type: "career",
+      title: "Master Railroader",
+      description: "Complete 500 jobs total",
+      requirement: "total_jobs_completed",
+      targetValue: 500,
+      currentProgress: 0,
+      isCompleted: false,
+      rewards: { cash: 500000, points: 150 },
+    },
+    {
+      type: "career",
+      title: "Legendary Railroader",
+      description: "Complete 1000 jobs total",
+      requirement: "total_jobs_completed",
+      targetValue: 1000,
+      currentProgress: 0,
+      isCompleted: false,
+      rewards: { cash: 1000000, points: 300 },
+    },
+    {
+      type: "career",
+      title: "Small Fleet",
+      description: "Own 5 locomotives",
+      requirement: "locomotives_owned",
+      targetValue: 5,
+      currentProgress: 0,
+      isCompleted: false,
+      rewards: { cash: 50000, points: 20 },
+    },
+    {
+      type: "career",
+      title: "Large Fleet",
+      description: "Own 10 locomotives",
+      requirement: "locomotives_owned",
+      targetValue: 10,
+      currentProgress: 0,
+      isCompleted: false,
+      rewards: { cash: 100000, points: 50 },
+    },
+    {
+      type: "career",
+      title: "Mega Fleet",
+      description: "Own 25 locomotives",
+      requirement: "locomotives_owned",
+      targetValue: 25,
+      currentProgress: 0,
+      isCompleted: false,
+      rewards: { cash: 250000, points: 100 },
+    },
+    {
+      type: "career",
+      title: "Rising Star",
+      description: "Reach level 10",
+      requirement: "player_level",
+      targetValue: 10,
+      currentProgress: 0,
+      isCompleted: false,
+      rewards: { cash: 25000, points: 15 },
+    },
+    {
+      type: "career",
+      title: "Expert",
+      description: "Reach level 25",
+      requirement: "player_level",
+      targetValue: 25,
+      currentProgress: 0,
+      isCompleted: false,
+      rewards: { cash: 100000, points: 50 },
+    },
+    {
+      type: "career",
+      title: "Legend",
+      description: "Reach level 50",
+      requirement: "player_level",
+      targetValue: 50,
+      currentProgress: 0,
+      isCompleted: false,
+      rewards: { cash: 500000, points: 200 },
+    },
+    {
+      type: "career",
+      title: "Road Warrior",
+      description: "Complete 100 Mainline Freight Jobs",
+      requirement: "complete_mainline_freight_jobs",
+      targetValue: 100,
+      currentProgress: 0,
+      isCompleted: false,
+      rewards: { cash: 150000, points: 60 },
+    },
+    {
+      type: "career",
+      title: "Intermodal Expert",
+      description: "Complete 50 Intermodal Jobs",
+      requirement: "complete_intermodal_jobs",
+      targetValue: 50,
+      currentProgress: 0,
+      isCompleted: false,
+      rewards: { cash: 100000, points: 50 },
+    },
+    {
+      type: "career",
+      title: "Distance Champion",
+      description: "Travel 10,000 miles total",
+      requirement: "total_miles_traveled",
+      targetValue: 10000,
+      currentProgress: 0,
+      isCompleted: false,
+      rewards: { cash: 200000, points: 75 },
+    },
+    {
+      type: "career",
+      title: "Paint Collector",
+      description: "Own 10 custom paint schemes",
+      requirement: "paint_schemes_owned",
+      targetValue: 10,
+      currentProgress: 0,
+      isCompleted: false,
+      rewards: { cash: 50000, points: 30 },
+    },
+    {
+      type: "career",
+      title: "Heritage Hunter",
+      description: "Purchase 1 Heritage Paint Scheme",
+      requirement: "heritage_schemes_owned",
+      targetValue: 1,
+      currentProgress: 0,
+      isCompleted: false,
+      rewards: { cash: 100000, points: 50 },
+    },
+    {
+      type: "career",
+      title: "Coal Baron",
+      description: "Complete 50 Coal Jobs",
+      requirement: "complete_coal_jobs",
+      targetValue: 50,
+      currentProgress: 0,
+      isCompleted: false,
+      rewards: { cash: 100000, points: 40 },
+    },
+    {
+      type: "career",
+      title: "Chemical Specialist",
+      description: "Complete 30 Chemical Jobs",
+      requirement: "complete_chemical_jobs",
+      targetValue: 30,
+      currentProgress: 0,
+      isCompleted: false,
+      rewards: { cash: 120000, points: 50 },
+    },
+  ];
+  
+  return careerMilestones.map(milestone => ({
+    ...milestone,
+    id: crypto.randomUUID(),
+    createdAt: now,
+  }));
+}
+
+// Event Achievements (Alpha Challenge for testers)
+export function generateEventAchievements(): Achievement[] {
+  const now = Date.now();
+  const alphaEndDate = new Date('2025-12-01T12:00:00').getTime();
+  
+  const eventChallenges: Omit<Achievement, 'id' | 'createdAt'>[] = [
+    {
+      type: "event",
+      title: "Alpha Tester - First Steps",
+      description: "Complete 5 Intermodal Jobs during alpha testing",
+      requirement: "complete_intermodal_jobs",
+      targetValue: 5,
+      currentProgress: 0,
+      isCompleted: false,
+      rewards: { cash: 7500, points: 5 },
+      expiresAt: alphaEndDate,
+    },
+    {
+      type: "event",
+      title: "Alpha Tester - Local Expert",
+      description: "Complete 15 Local Freight Jobs during alpha testing",
+      requirement: "complete_local_freight_jobs",
+      targetValue: 15,
+      currentProgress: 0,
+      isCompleted: false,
+      rewards: { cash: 10000, points: 0 },
+      expiresAt: alphaEndDate,
+    },
+    {
+      type: "event",
+      title: "Alpha Tester - Mainline Pro",
+      description: "Complete 5 Mainline Jobs during alpha testing",
+      requirement: "complete_mainline_jobs",
+      targetValue: 5,
+      currentProgress: 0,
+      isCompleted: false,
+      rewards: { cash: 15000, points: 0 },
+      expiresAt: alphaEndDate,
+    },
+    {
+      type: "event",
+      title: "ALPHA CHALLENGE",
+      description: "Complete 250 Total Jobs during alpha testing to earn the exclusive Alpha Livery!",
+      requirement: "total_jobs_completed",
+      targetValue: 250,
+      currentProgress: 0,
+      isCompleted: false,
+      rewards: { cash: 500000, points: 200, heritagePaintSchemeId: "alpha_livery" },
+      expiresAt: alphaEndDate,
+    },
+  ];
+  
+  return eventChallenges.map(challenge => ({
+    ...challenge,
+    id: crypto.randomUUID(),
+    createdAt: now,
+  }));
+}
+
+// Helper function to get next Friday at 12 PM
+export function getNextFriday(): number {
+  const now = new Date();
+  const dayOfWeek = now.getDay();
+  const daysUntilFriday = (5 - dayOfWeek + 7) % 7 || 7; // 5 = Friday
+  const nextFriday = new Date(now);
+  nextFriday.setDate(now.getDate() + daysUntilFriday);
+  nextFriday.setHours(12, 0, 0, 0);
+  return nextFriday.getTime();
+}
+
+// Check if weekly achievements need to be refreshed
+export function shouldRefreshWeeklyAchievements(refreshAt?: number): boolean {
+  if (!refreshAt) return true;
+  return Date.now() >= refreshAt;
+}
+
+// ============================================================================
+// HERITAGE PAINT SCHEMES CATALOG
+// ============================================================================
+
+export const HERITAGE_PAINT_SCHEMES_CATALOG: Omit<HeritagePaintScheme, 'createdAt' | 'isPurchased' | 'appliedToLocoId'>[] = [
+  {
+    id: "alpha_livery", // Stable ID for achievement rewards
+    name: "Alpha Livery",
+    description: "Exclusive paint scheme for alpha testers who completed 250 jobs",
+    primaryColor: "#9333ea", // Purple
+    secondaryColor: "#fbbf24", // Gold
+    accentColor: "#1e293b", // Dark slate
+    stripePattern: "custom",
+    purchaseCost: 0, // Free reward
+    pointsCost: 0, // Free reward
+    levelRequired: 1,
+  },
+  {
+    id: "heritage_blue_gold",
+    name: "Heritage Blue & Gold",
+    description: "Classic railroad heritage scheme with royal blue and gold accents",
+    primaryColor: "#1e40af",
+    secondaryColor: "#fbbf24",
+    accentColor: "#ffffff",
+    stripePattern: "striped",
+    purchaseCost: 500000,
+    pointsCost: 100,
+    levelRequired: 25,
+  },
+  {
+    id: "heritage_crimson_express",
+    name: "Heritage Crimson Express",
+    description: "Bold crimson and silver heritage livery",
+    primaryColor: "#991b1b",
+    secondaryColor: "#d1d5db",
+    accentColor: "#1f2937",
+    stripePattern: "striped",
+    purchaseCost: 500000,
+    pointsCost: 125,
+    levelRequired: 25,
+  },
+  {
+    id: "heritage_forest_green",
+    name: "Heritage Forest Green",
+    description: "Deep forest green with cream accents, classic American railroad style",
+    primaryColor: "#14532d",
+    secondaryColor: "#fef3c7",
+    accentColor: "#78350f",
+    stripePattern: "striped",
+    purchaseCost: 500000,
+    pointsCost: 110,
+    levelRequired: 25,
+  },
+  {
+    id: "heritage_sunset_limited",
+    name: "Heritage Sunset Limited",
+    description: "Warm orange and yellow sunset-inspired heritage scheme",
+    primaryColor: "#ea580c",
+    secondaryColor: "#fde047",
+    accentColor: "#7c2d12",
+    stripePattern: "custom",
+    purchaseCost: 500000,
+    pointsCost: 150,
+    levelRequired: 25,
+  },
+  {
+    id: "heritage_black_diamond",
+    name: "Heritage Black Diamond",
+    description: "Sleek black with silver and red accents, premium heritage design",
+    primaryColor: "#0f172a",
+    secondaryColor: "#e5e7eb",
+    accentColor: "#dc2626",
+    stripePattern: "custom",
+    purchaseCost: 500000,
+    pointsCost: 150,
+    levelRequired: 25,
+  },
+];

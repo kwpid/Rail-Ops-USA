@@ -1,0 +1,48 @@
+- update paint system a little further:
+have it so paint schemes can be removed / changed on locomotives (this is to help with the additions below)
+Heritage / Special Schemes + Special Liveries will mostly be used with this, as players may move them around to newer or betteer locomotives.
+
+add a refresh timer to the loaner train marketplace, and ensure trains her show up (not showing up currently, but it could becuase a refresh hasnt happened just yet)
+
+add an achievment/task system, with a new currency called "Points" (players start with 10)
+
+3 types of achievments:
+Weekly, Career, Event
+Weekly are just tasks that can be completed for money and or points
+10 different tasks/challenges per week (resets every friday @ 12 PM)
+challenges can be like: Complete 5 Intermodal Jobs, Complete 15 Mainline Jobs, etc
+some can give 5000-1000 cash, harder ones give ~25-50k, and some points (most is 25)
+
+Career achieevements are things that can be completed throughout playing the game (tehse dont reset)
+Such as:
+Have 1,000,000 or more cash in your accouunt (Reward: 50 ponts)
+Have 10,000,000 or more cash in your account (Reward: 250 points)
+etc
+have at least 20 of these
+
+Event will be up to developers (have a file to create event rewards easily)
+Event rewards only last for a specified amount of time, and can be specific challenges
+For now, have the "ALPHA CHALLENGE", (for alpha testers)
+
+Challenges / Tasks:
+Complete 5 Intermodal Jobs (+5 points, +7,500 Cash)
+Complete 15 Local Freight Jobs (+10,000 Cash)
+Complete 5 Mainline Jobs (+15,000 Cash)
+[add a few more challenges here]
+Complete 250 Total Jobs (+500,000 Cash, 200 Points, and a special livery: "Alpha Livery")
+liveries are a paint scheme, these can only be applied to locomotive
+this even ends on December 1st, 2025 @ 12 pm
+
+
+
+
+What can points be used for?
+- points can be used to auto-complete jobs instead of waiting (10 points to do this)
+- points can be used to auto-complete painting trains (5 points, and this does work for all trains, mneaning if i repaint my entire fleet, then redeem 5 points to complete, it completes all paints)
+-  points can be used to purchase heritage / paint schemes (more info below)
+
+Heritage / Special Paint Schemes:
+- have a similiar thing to paint scheme, but a  bit more detailed / expensive
+- requires level 25 minium, up to 500,000 cash, and 100-150 points for a single paint scheme
+- can only be applied to a single locomotive in the fleet (players choice)
+- this locomotive will have a special styling for its card (based off paint colors), as well a gradient animation for the trains #'s on jobs, and such

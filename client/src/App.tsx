@@ -13,6 +13,8 @@ import Jobs from "@/pages/jobs";
 import Shop from "@/pages/shop";
 import LoanerTrains from "@/pages/loaner-trains";
 import News from "@/pages/news";
+import Achievements from "@/pages/achievements";
+import HeritageSchemes from "@/pages/heritage-schemes";
 import NotFound from "@/pages/not-found";
 
 function AppRouter() {
@@ -46,6 +48,8 @@ function AppRouter() {
         <Route path="/jobs" component={Jobs} />
         <Route path="/shop" component={Shop} />
         <Route path="/loaner-trains" component={LoanerTrains} />
+        <Route path="/achievements" component={Achievements} />
+        <Route path="/heritage-schemes" component={HeritageSchemes} />
         <Route path="/news" component={News} />
         <Route component={NotFound} />
       </Switch>

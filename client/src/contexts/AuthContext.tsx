@@ -7,7 +7,8 @@ import {
 } from "firebase/auth";
 import { doc, getDoc, setDoc, onSnapshot } from "firebase/firestore";
 import { getAuthOrThrow, getGoogleProviderOrThrow, getDbOrThrow, firebaseConfigured } from "@/lib/firebase";
-import type { PlayerData } from "@shared/schema";
+import type { PlayerData, Achievement } from "@shared/schema";
+import { generateWeeklyAchievements, generateCareerAchievements, generateEventAchievements, HERITAGE_PAINT_SCHEMES_CATALOG, getNextFriday, shouldRefreshWeeklyAchievements } from "@shared/schema";
 
 interface AuthContextType {
   user: FirebaseUser | null;
@@ -101,23 +102,39 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       if (!userSnap.exists()) {
         // Create initial player document
+        const now = Date.now();
         const initialData: PlayerData = {
           player: {
             id: result.user.uid,
             email: result.user.email!,
             displayName: result.user.displayName!,
             photoURL: result.user.photoURL || undefined,
-            createdAt: Date.now(),
+            createdAt: now,
           },
           stats: {
             cash: 500000,
             xp: 0,
             level: 1,
             nextLocoId: 2,
+            points: 10, // Starting points
+            totalJobsCompleted: 0,
           },
           locomotives: [],
           jobs: [],
           paintSchemes: [],
+          heritagePaintSchemes: HERITAGE_PAINT_SCHEMES_CATALOG.map(scheme => ({
+            ...scheme,
+            createdAt: now,
+            isPurchased: false,
+          })),
+          achievements: [
+            ...generateWeeklyAchievements(),
+            ...generateCareerAchievements(),
+            ...generateEventAchievements(),
+          ],
+          weeklyAchievementsRefreshAt: getNextFriday(),
+          loanerTrains: [],
+          loanerTrainsRefreshAt: undefined,
         };
 
         await setDoc(userDoc, initialData);

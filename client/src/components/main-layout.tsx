@@ -34,6 +34,9 @@ import {
   Star,
   TrendingUp,
   Menu,
+  Trophy,
+  Sparkles,
+  Coins,
 } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import { calculateLevel, getXpForNextLevel } from "@shared/schema";
@@ -44,6 +47,8 @@ const menuItems = [
   { title: "Jobs", icon: Briefcase, path: "/jobs" },
   { title: "Shop", icon: Store, path: "/shop" },
   { title: "Loaner Trains", icon: ShoppingCart, path: "/loaner-trains" },
+  { title: "Achievements", icon: Trophy, path: "/achievements" },
+  { title: "Heritage Schemes", icon: Sparkles, path: "/heritage-schemes" },
   { title: "News", icon: Newspaper, path: "/news" },
 ];
 
@@ -116,6 +121,14 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
                 <DollarSign className="w-4 h-4 text-chart-3" />
                 <span className="font-mono font-semibold" data-testid="text-cash">
                   ${stats.cash.toLocaleString()}
+                </span>
+              </div>
+
+              {/* Points */}
+              <div className="flex items-center gap-2 px-3 py-1 bg-background rounded-md">
+                <Coins className="w-4 h-4 text-amber-500" />
+                <span className="font-mono font-semibold text-amber-600 dark:text-amber-400" data-testid="text-points">
+                  {stats.points} pts
                 </span>
               </div>
 
