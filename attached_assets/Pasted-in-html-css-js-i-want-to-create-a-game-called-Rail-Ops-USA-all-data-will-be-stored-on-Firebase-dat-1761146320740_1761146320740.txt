@@ -1,0 +1,151 @@
+in html/css/js i want to create a game called Rail Ops: USA
+
+all data will be stored on Firebase database;
+<script type="module">
+  // Import the functions you need from the SDKs you need
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/12.4.0/firebase-app.js";
+  import { getAnalytics } from "https://www.gstatic.com/firebasejs/12.4.0/firebase-analytics.js";
+  // TODO: Add SDKs for Firebase products that you want to use
+  // https://firebase.google.com/docs/web/setup#available-libraries
+
+  // Your web app's Firebase configuration
+  // For Firebase JS SDK v7.20.0 and later, measurementId is optional
+  const firebaseConfig = {
+    apiKey: "AIzaSyBEHyI05k2kDJBv2-poPENpWivzLsGmjME",
+    authDomain: "train-manager-2.firebaseapp.com",
+    projectId: "train-manager-2",
+    storageBucket: "train-manager-2.firebasestorage.app",
+    messagingSenderId: "92471782431",
+    appId: "1:92471782431:web:fd36abf945b5e5dcfff92a",
+    measurementId: "G-01NKBXGHE3"
+  };
+
+  // Initialize Firebase
+  const app = initializeApp(firebaseConfig);
+  const analytics = getAnalytics(app);
+</script>
+
+- create databases dynamically, so first user = databses created
+
+we will use google auth / login for signing up / logging in. username will be the players username
+ensure the google login/signup is a popup
+
+ensure when they login they stay logged in until they sign out
+
+also provide the firestore rules needed
+
+ensure data is stored for that user (Not globally)
+and ensure buying a locomotive then shows it in their inventory
+
+game:
+
+- the game loop is simple.
+players will first create their company:
+players first pick a city (in the USA) to primarily operate out of, their company name and colors
+they then start with a basic locomotive, and they can assign it to a job from the job lists. Three Categories: Local Freight, Mainline Freight, Special Freight 
+Mainline and Special are locked until a specific user level (Mainline = level 10, Special = level 50)
+
+starting locomotive:
+- EMD: GP38-2, 2,000 HP,
+
+all locos will have:
+Name / Model
+Horsepower
+Top Speed
+Weight
+Fuel Capacity (gals)
+Fuel Efficiency
+Reliabiltiy 
+Maintance Cost ($/mil)
+Purchase Cost
+Tier / Class
+
+example for the starting loco:
+locomotive = {
+    "model": "EMD GP38-2",
+    "manufacturer": "Electro-Motive Division (EMD)",
+    "unit_number": "GP38-2 #2001",
+    "tier": 1,  # Local Freight Tier
+    "horsepower": 2000,
+    "top_speed_mph": 65,
+    "weight_tons": 125,
+    "tractive_effort_lbs": 61000,
+    "fuel_capacity_gal": 2000,
+    "fuel_efficiency_gph": 48,  # gallons per hour at full load
+    "reliability": 95,  # percent chance of trouble-free run
+    "maintenance_cost_per_mile": 1.15,  # dollars per mile
+    "purchase_cost": 250000,  # starter cost
+    "resale_value": 180000,
+    "mileage": 0,
+    "paint_condition": 100,  # perfect condition for starter unit
+    "livery": {
+        "main": "Default Blue",
+        "alt": "Industrial Orange (Unlock Level 5)",
+        "special": "Heritage Scheme (Unlock Level 10)"
+    },
+    "status": "available",
+    "notes": "Reliable 4-axle road switcher; ideal for shortline and local freight operations."
+}
+
+
+
+players can see these in their inventory, as well as the shop, and can purhcase more
+players start with 500,000 Cash and with that locomotive
+
+jobs will have the type and stuff:
+- Job ID / Name
+- Origin (players yard)
+- Destination
+- Distance (miles)
+- Freight Type
+- Car Count
+- HP Count (Minium HP needed, players can assign mutliple locomotives to the job to meet the requirements if needed)
+- Time (how long it will take basd on distance and speed of the loco(s))
+- Payout ($)
+- XP
+example:
+job = {
+    "id": "LCL-001",
+    "origin": "Charlotte, NC",
+    "destination": "Gastonia Yard",
+    "distance_miles": 20,
+    "freight_type": "Boxcar (General Goods)",
+    "car_count": 6,
+    "hp_required": 1200,
+    "payout": 2500,
+    "time_hours": 0.5,
+    "xp_reward": 100,
+    "tier": 1,
+    "status": "available"
+}
+
+when a job is completed, the player gets money and XP from it
+
+site design:
+- simplistic but user firendly, dark themed. shhould utilize icons and have realistic and design layout choices
+
+site code should be modular and easily editable. should allow for later events, changes to code, etc. just easily modifiable to help
+
+
+- when obtaing a locomotive, the loco gets assigned a company ID (Loco ####)
+so first locomotive will be: #0001, second would be #0002, etc
+this is automatic for each time they buy a locotmotive, the ID is +1 from the previous automatic ID
+
+players can change unit ids (costs $10k), but it cannot match an already existing locotmotive ID
+
+an automatic ID stays, even if a unit before it gets remoed or ID changes, the ID on the other locomotives wont change, they stay until the locotmovie is scrapped / sold, or the ID is change manually
+
+
+with this:
+- in inventory > locomotive, have an option to Sell or Scrap (both return some % of money), this can be used if the locotmovie no longer has life / is unrepairable or if the user just doesnt want it.
+- also add the customization menu for locomotives, for now they can only change the locomotive #, but will later be able to change livery
+
+
+level system changes:
+- when a player levels up, have a popup showing that they leveld up, as well as what theyve unlocked (if anything)
+
+
+ensure players can see thier cash and XP and level
+
+
+have a simple news system so players can check out updates from the website
