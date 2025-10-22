@@ -130,9 +130,10 @@ export default function HeritageSchemesPage() {
       setCreateDialogOpen(false);
     } catch (error) {
       console.error("Error creating heritage scheme:", error);
+      const errorMessage = error instanceof Error ? error.message : "Failed to create heritage scheme. Please try again.";
       toast({
-        title: "Error",
-        description: "Failed to create heritage scheme. Please try again.",
+        title: "Cannot Create Heritage Scheme",
+        description: errorMessage,
         variant: "destructive",
       });
     } finally {
