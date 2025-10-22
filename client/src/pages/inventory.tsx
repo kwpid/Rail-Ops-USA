@@ -27,7 +27,7 @@ export default function Inventory() {
   const [filterStatus, setFilterStatus] = useState<string>("all");
   const [filterTag, setFilterTag] = useState<"all" | "Local / Yard" | "Long Haul">("all");
   const [showPaintSchemes, setShowPaintSchemes] = useState(false);
-  const [paintSchemeMode, setPaintSchemeMode] = useState<"create" | "apply" | null>(null);
+  const [paintSchemeMode, setPaintSchemeMode] = useState<"create" | "apply" | "patch" | null>(null);
   const [newPaintScheme, setNewPaintScheme] = useState({
     name: "",
     primaryColor: "#FF0000",
@@ -37,6 +37,8 @@ export default function Inventory() {
   });
   const [applyPaintTarget, setApplyPaintTarget] = useState<"single" | "all" | "new">("single");
   const [selectedPaintScheme, setSelectedPaintScheme] = useState<string | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const ITEMS_PER_PAGE = 30;
 
   if (!playerData || !user) return null;
 
@@ -104,6 +106,14 @@ export default function Inventory() {
       return matchesSearch && matchesStatus && matchesTag;
     });
   }, [locomotives, searchQuery, filterStatus, filterTag]);
+
+  const paginatedLocos = useMemo(() => {
+    const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
+    const endIndex = startIndex + ITEMS_PER_PAGE;
+    return filteredLocos.slice(startIndex, endIndex);
+  }, [filteredLocos, currentPage]);
+
+  const totalPages = Math.ceil(filteredLocos.length / ITEMS_PER_PAGE);
 
   const handleSell = async (loco: Locomotive) => {
     if (!confirm(`Sell ${loco.model} ${loco.unitNumber} for $${loco.resaleValue.toLocaleString()}?`)) return;
@@ -335,6 +345,51 @@ export default function Inventory() {
     }
   };
 
+  const handlePatchPaint = async () => {
+    if (!selectedLoco || !selectedLoco.previousOwnerName) return;
+
+    const PATCH_COST = 800;
+    const PATCH_DOWNTIME = 2 * 60 * 1000;
+
+    if (playerData.stats.cash < PATCH_COST) {
+      toast({ title: "Insufficient Funds", description: `Patching paint costs $${PATCH_COST.toLocaleString()}`, variant: "destructive" });
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const db = getDbOrThrow();
+      const playerRef = doc(db, "players", user.uid);
+      const now = Date.now();
+      const patchCompleteAt = now + PATCH_DOWNTIME;
+
+      const updatedLocos = locomotives.map(l => 
+        l.id === selectedLoco.id 
+          ? { ...l, isPatched: true, status: "in_paint_shop" as const, paintCompleteAt: patchCompleteAt } 
+          : l
+      );
+
+      await updateDoc(playerRef, {
+        locomotives: updatedLocos,
+        "stats.cash": playerData.stats.cash - PATCH_COST,
+      });
+
+      await refreshPlayerData();
+      setSelectedLoco(null);
+      setPaintSchemeMode(null);
+      
+      toast({ 
+        title: "Paint Patched!", 
+        description: "Logos and numbers updated - ready in 2 minutes",
+      });
+    } catch (error) {
+      console.error(error);
+      toast({ title: "Error", description: "Failed to patch paint", variant: "destructive" });
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const getConditionBadgeVariant = (status: string) => {
     if (status === "excellent" || status === "good") return "default";
     if (status === "fair") return "secondary";
@@ -421,7 +476,7 @@ export default function Inventory() {
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {filteredLocos.map((loco) => {
+          {paginatedLocos.map((loco) => {
             const condition = getLocomotiveConditionStatus(loco.mileage, loco.health || 100);
             return (
               <Card

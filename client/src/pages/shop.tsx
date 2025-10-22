@@ -8,9 +8,10 @@ import { Separator } from "@/components/ui/separator";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
-import { LOCOMOTIVE_CATALOG, type LocomotiveCatalogItem } from "@shared/schema";
-import { Zap, TrendingUp, Gauge, Weight, DollarSign, Search, Filter, Fuel, Tag } from "lucide-react";
+import { LOCOMOTIVE_CATALOG, type LocomotiveCatalogItem, generateUsedLocomotive, type UsedLocomotiveItem } from "@shared/schema";
+import { Zap, TrendingUp, Gauge, Weight, DollarSign, Search, Filter, Fuel, Tag, Activity } from "lucide-react";
 import { doc, updateDoc } from "firebase/firestore";
 import { getDbOrThrow } from "@/lib/firebase";
 
@@ -18,15 +19,18 @@ export default function Shop() {
   const { playerData, user, refreshPlayerData } = useAuth();
   const { toast } = useToast();
   const [selectedLoco, setSelectedLoco] = useState<LocomotiveCatalogItem | null>(null);
+  const [selectedUsedLoco, setSelectedUsedLoco] = useState<UsedLocomotiveItem | null>(null);
   const [loading, setLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [filterTag, setFilterTag] = useState<"all" | "Local / Yard" | "Long Haul">("all");
   const [sortBy, setSortBy] = useState<"price" | "hp" | "name">("price");
   const [bulkQuantity, setBulkQuantity] = useState(1);
+  const [marketTab, setMarketTab] = useState<"new" | "used">("new");
 
   if (!playerData || !user) return null;
 
   const stats = playerData.stats;
+  const company = playerData.company;
 
   const filteredAndSortedLocos = useMemo(() => {
     let filtered = LOCOMOTIVE_CATALOG.filter((loco) => {
@@ -48,6 +52,26 @@ export default function Shop() {
     return filtered;
   }, [searchQuery, filterTag, sortBy]);
 
+  const usedLocomotives = useMemo(() => {
+    let used = LOCOMOTIVE_CATALOG.map(loco => generateUsedLocomotive(loco)).filter((loco) => {
+      const matchesSearch = 
+        loco.model.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        loco.manufacturer.toLowerCase().includes(searchQuery.toLowerCase());
+      
+      const matchesTag = filterTag === "all" || loco.tags.includes(filterTag);
+      
+      return matchesSearch && matchesTag;
+    });
+
+    used.sort((a, b) => {
+      if (sortBy === "price") return a.usedPrice - b.usedPrice;
+      if (sortBy === "hp") return b.horsepower - a.horsepower;
+      return a.model.localeCompare(b.model);
+    });
+
+    return used;
+  }, [searchQuery, filterTag, sortBy]);
+
   const handlePurchase = async (catalogItem: LocomotiveCatalogItem, quantity: number) => {
     const totalCost = catalogItem.purchaseCost * quantity;
     
@@ -66,11 +90,12 @@ export default function Shop() {
       const playerRef = doc(db, "players", user.uid);
       let nextId = stats.nextLocoId;
       const newLocos = [];
+      const defaultPaintScheme = company?.defaultPaintScheme;
 
       for (let i = 0; i < quantity; i++) {
         const unitNumber = `#${nextId.toString().padStart(4, "0")}`;
         
-        const newLoco = {
+        const newLoco: any = {
           id: crypto.randomUUID(),
           unitNumber,
           model: catalogItem.model,
@@ -96,6 +121,10 @@ export default function Shop() {
           notes: catalogItem.notes,
         };
 
+        if (defaultPaintScheme) {
+          newLoco.paintSchemeId = defaultPaintScheme;
+        }
+
         newLocos.push(newLoco);
         nextId++;
       }
@@ -118,6 +147,75 @@ export default function Shop() {
       toast({
         title: "Error",
         description: "Failed to purchase locomotive",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleUsedPurchase = async (usedItem: UsedLocomotiveItem) => {
+    if (stats.cash < usedItem.usedPrice) {
+      toast({
+        title: "Insufficient Funds",
+        description: `You need $${usedItem.usedPrice.toLocaleString()} to purchase this used locomotive.`,
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const db = getDbOrThrow();
+      const playerRef = doc(db, "players", user.uid);
+      const nextId = stats.nextLocoId;
+      const unitNumber = `#${nextId.toString().padStart(4, "0")}`;
+
+      const newLoco: any = {
+        id: crypto.randomUUID(),
+        unitNumber,
+        model: usedItem.model,
+        manufacturer: usedItem.manufacturer,
+        tier: usedItem.tier,
+        tags: usedItem.tags,
+        horsepower: usedItem.horsepower,
+        topSpeed: usedItem.topSpeed,
+        weight: usedItem.weight,
+        tractiveEffort: usedItem.tractiveEffort,
+        fuelCapacity: usedItem.fuelCapacity,
+        fuelEfficiency: usedItem.fuelEfficiency,
+        reliability: usedItem.reliability,
+        maintenanceCost: usedItem.maintenanceCost,
+        purchaseCost: usedItem.usedPrice,
+        resaleValue: Math.floor(usedItem.usedPrice * 0.7),
+        scrapValue: Math.floor(usedItem.usedPrice * 0.3),
+        mileage: usedItem.mileage,
+        health: usedItem.health,
+        paintCondition: 60,
+        previousOwnerName: usedItem.previousOwner,
+        isUsed: true,
+        status: usedItem.needsRepair ? "needs_repair" as const : "available" as const,
+        purchasedAt: Date.now(),
+        notes: usedItem.notes,
+      };
+
+      await updateDoc(playerRef, {
+        locomotives: [...playerData.locomotives, newLoco],
+        "stats.cash": stats.cash - usedItem.usedPrice,
+        "stats.nextLocoId": nextId + 1,
+      });
+
+      await refreshPlayerData();
+      setSelectedUsedLoco(null);
+      toast({
+        title: "Used Locomotive Purchased!",
+        description: `${usedItem.model} (ex-${usedItem.previousOwner}) added to your fleet for $${usedItem.usedPrice.toLocaleString()}`,
+      });
+    } catch (error) {
+      console.error(error);
+      toast({
+        title: "Error",
+        description: "Failed to purchase used locomotive",
         variant: "destructive",
       });
     } finally {

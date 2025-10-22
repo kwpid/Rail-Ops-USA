@@ -17,6 +17,7 @@ export const companySchema = z.object({
   city: z.string().min(1),
   primaryColor: z.string(), // hex color
   secondaryColor: z.string(), // hex color
+  defaultPaintScheme: z.string().optional(), // ID of paint scheme to auto-apply to new locomotives
   createdAt: z.number(),
 });
 
@@ -53,11 +54,14 @@ export const locomotiveSchema = z.object({
   health: z.number().min(0).max(100).default(100), // 100 = perfect, 0 = needs scrapping
   paintCondition: z.number().min(0).max(100).default(100),
   paintSchemeId: z.string().optional(), // Reference to paint scheme
+  previousOwnerName: z.string().optional(), // For used locomotives - previous company name
+  isPatched: z.boolean().optional(), // True if paint was patched instead of fully repainted
   status: z.enum(["available", "assigned", "needs_repair", "in_paint_shop", "stored"]).default("available"),
   assignedJobId: z.string().optional(),
   paintCompleteAt: z.number().optional(), // Timestamp when paint job will be complete
   purchasedAt: z.number(),
   notes: z.string().optional(),
+  isUsed: z.boolean().optional(), // True if purchased as used/loaner
 });
 
 // ============================================================================
@@ -82,7 +86,9 @@ export type InsertPaintScheme = z.infer<typeof insertPaintSchemeSchema>;
 export const PAINT_COSTS = {
   SINGLE_LOCO: 5000, // $5,000 to paint one locomotive
   ALL_LOCOS_PER_UNIT: 3500, // $3,500 per loco when painting all (bulk discount)
-  DOWNTIME_MINUTES: 10, // 10 minutes out of service
+  PATCH_COST: 800, // $800 to patch logos/numbers (cheap alternative)
+  DOWNTIME_MINUTES: 10, // 10 minutes out of service for full paint
+  PATCH_DOWNTIME_MINUTES: 2, // 2 minutes for patching
 };
 
 // ============================================================================
@@ -247,8 +253,8 @@ export const LOCOMOTIVE_CATALOG: LocomotiveCatalogItem[] = [
     fuelEfficiency: 48,
     reliability: 95,
     maintenanceCost: 1.15,
-    purchaseCost: 250000,
-    resaleValue: 180000,
+    purchaseCost: 1800000,
+    resaleValue: 1300000,
     notes: "Reliable 4-axle road switcher; ideal for shortline and local freight operations.",
   },
   {
@@ -264,8 +270,8 @@ export const LOCOMOTIVE_CATALOG: LocomotiveCatalogItem[] = [
     fuelEfficiency: 42,
     reliability: 92,
     maintenanceCost: 1.05,
-    purchaseCost: 220000,
-    resaleValue: 160000,
+    purchaseCost: 1500000,
+    resaleValue: 1100000,
     notes: "Versatile switcher for yard and light road work.",
   },
   {
@@ -281,8 +287,8 @@ export const LOCOMOTIVE_CATALOG: LocomotiveCatalogItem[] = [
     fuelEfficiency: 52,
     reliability: 90,
     maintenanceCost: 1.25,
-    purchaseCost: 275000,
-    resaleValue: 195000,
+    purchaseCost: 1900000,
+    resaleValue: 1400000,
     notes: "Powerful 4-axle unit with good fuel economy.",
   },
   
@@ -300,8 +306,8 @@ export const LOCOMOTIVE_CATALOG: LocomotiveCatalogItem[] = [
     fuelEfficiency: 68,
     reliability: 94,
     maintenanceCost: 1.45,
-    purchaseCost: 450000,
-    resaleValue: 320000,
+    purchaseCost: 2400000,
+    resaleValue: 1700000,
     notes: "Legendary 6-axle workhorse; backbone of mainline freight.",
   },
   {
@@ -317,8 +323,8 @@ export const LOCOMOTIVE_CATALOG: LocomotiveCatalogItem[] = [
     fuelEfficiency: 70,
     reliability: 91,
     maintenanceCost: 1.50,
-    purchaseCost: 475000,
-    resaleValue: 335000,
+    purchaseCost: 2600000,
+    resaleValue: 1850000,
     notes: "Heavy-duty 6-axle unit for demanding mainline service.",
   },
   {
@@ -334,8 +340,8 @@ export const LOCOMOTIVE_CATALOG: LocomotiveCatalogItem[] = [
     fuelEfficiency: 72,
     reliability: 88,
     maintenanceCost: 1.55,
-    purchaseCost: 500000,
-    resaleValue: 360000,
+    purchaseCost: 2700000,
+    resaleValue: 1950000,
     notes: "High-horsepower 4-axle for fast mainline work.",
   },
   
@@ -353,8 +359,8 @@ export const LOCOMOTIVE_CATALOG: LocomotiveCatalogItem[] = [
     fuelEfficiency: 88,
     reliability: 96,
     maintenanceCost: 1.80,
-    purchaseCost: 750000,
-    resaleValue: 540000,
+    purchaseCost: 3200000,
+    resaleValue: 2300000,
     notes: "Modern AC traction locomotive for heavy-haul operations.",
   },
   {
@@ -370,8 +376,8 @@ export const LOCOMOTIVE_CATALOG: LocomotiveCatalogItem[] = [
     fuelEfficiency: 92,
     reliability: 95,
     maintenanceCost: 1.85,
-    purchaseCost: 800000,
-    resaleValue: 575000,
+    purchaseCost: 3400000,
+    resaleValue: 2450000,
     notes: "Powerful AC traction unit for coal and intermodal trains.",
   },
   {
@@ -387,8 +393,8 @@ export const LOCOMOTIVE_CATALOG: LocomotiveCatalogItem[] = [
     fuelEfficiency: 105,
     reliability: 93,
     maintenanceCost: 2.10,
-    purchaseCost: 1200000,
-    resaleValue: 860000,
+    purchaseCost: 4800000,
+    resaleValue: 3400000,
     notes: "Ultimate heavy-haul locomotive with exceptional tractive effort.",
   },
 ];
@@ -450,8 +456,8 @@ export const US_CITIES = [
 // ============================================================================
 
 export const XP_PER_LEVEL = [
-  0, 1000, 2500, 4500, 7000, 10000, 13500, 17500, 22000, 27000, // Levels 1-10
-  35000, 44000, 54000, 65000, 77000, 90000, 104000, 119000, 135000, 152000, // Levels 11-20
+  0, 200, 450, 750, 1100, 1500, 1950, 2450, 3000, 3600, // Levels 1-10
+  4250, 5000, 5800, 6700, 7700, 8800, 10000, 11300, 12700, 14200, // Levels 11-20
 ];
 
 export function calculateLevel(xp: number): number {
@@ -465,7 +471,7 @@ export function calculateLevel(xp: number): number {
 
 export function getXpForNextLevel(currentLevel: number): number {
   if (currentLevel >= XP_PER_LEVEL.length) {
-    return XP_PER_LEVEL[XP_PER_LEVEL.length - 1] + (currentLevel - XP_PER_LEVEL.length + 1) * 20000;
+    return XP_PER_LEVEL[XP_PER_LEVEL.length - 1] + (currentLevel - XP_PER_LEVEL.length + 1) * 2000;
   }
   return XP_PER_LEVEL[currentLevel];
 }
@@ -513,4 +519,49 @@ export function getLocomotiveConditionStatus(mileage: number, health: number): {
   } else {
     return { status: "critical", label: "Critical - Consider Scrapping" };
   }
+}
+
+// ============================================================================
+// USED LOCOMOTIVE MARKET
+// ============================================================================
+
+const FICTIONAL_RAILROAD_NAMES = [
+  "Burlington Northern",
+  "Chesapeake Western",
+  "Dakota Plains Railway",
+  "Eastern Mountain Lines",
+  "Great Lakes Transportation",
+  "Midwest Freight Co.",
+  "Northern Pacific Lines",
+  "Pacific Coast Rail",
+  "Rocky Mountain Rail",
+  "Southern Freight Lines",
+  "Texas & Western",
+  "Union Central Railroad",
+];
+
+export interface UsedLocomotiveItem extends LocomotiveCatalogItem {
+  usedPrice: number;
+  mileage: number;
+  health: number;
+  previousOwner: string;
+  needsRepair: boolean;
+}
+
+export function generateUsedLocomotive(catalogItem: LocomotiveCatalogItem): UsedLocomotiveItem {
+  const mileage = Math.floor(Math.random() * 600000) + 400000;
+  const health = calculateLocomotiveHealth(mileage, catalogItem.reliability);
+  const needsRepair = health < 60;
+  const depreciation = 0.25 + (mileage / 1000000) * 0.35;
+  const usedPrice = Math.floor(catalogItem.purchaseCost * (1 - depreciation));
+  const previousOwner = FICTIONAL_RAILROAD_NAMES[Math.floor(Math.random() * FICTIONAL_RAILROAD_NAMES.length)];
+  
+  return {
+    ...catalogItem,
+    usedPrice,
+    mileage,
+    health,
+    previousOwner,
+    needsRepair,
+  };
 }
