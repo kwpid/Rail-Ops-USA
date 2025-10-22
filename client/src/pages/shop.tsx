@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -6,33 +6,55 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Separator } from "@/components/ui/separator";
 import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { LOCOMOTIVE_CATALOG, type LocomotiveCatalogItem } from "@shared/schema";
-import { Zap, TrendingUp, Gauge, Weight, DollarSign, Lock } from "lucide-react";
+import { Zap, TrendingUp, Gauge, Weight, DollarSign, Search, Filter, Fuel, Tag } from "lucide-react";
 import { doc, updateDoc } from "firebase/firestore";
-import { db } from "@/lib/firebase";
-
-const tierNames = {
-  1: "Local Freight",
-  2: "Mainline Freight",
-  3: "Special Freight",
-};
+import { getDbOrThrow } from "@/lib/firebase";
 
 export default function Shop() {
   const { playerData, user, refreshPlayerData } = useAuth();
   const { toast } = useToast();
   const [selectedLoco, setSelectedLoco] = useState<LocomotiveCatalogItem | null>(null);
   const [loading, setLoading] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [filterTag, setFilterTag] = useState<"all" | "Local / Yard" | "Long Haul">("all");
+  const [sortBy, setSortBy] = useState<"price" | "hp" | "name">("price");
+  const [bulkQuantity, setBulkQuantity] = useState(1);
 
   if (!playerData || !user) return null;
 
   const stats = playerData.stats;
 
-  const handlePurchase = async (catalogItem: LocomotiveCatalogItem) => {
-    if (stats.cash < catalogItem.purchaseCost) {
+  const filteredAndSortedLocos = useMemo(() => {
+    let filtered = LOCOMOTIVE_CATALOG.filter((loco) => {
+      const matchesSearch = 
+        loco.model.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        loco.manufacturer.toLowerCase().includes(searchQuery.toLowerCase());
+      
+      const matchesTag = filterTag === "all" || loco.tags.includes(filterTag);
+      
+      return matchesSearch && matchesTag;
+    });
+
+    filtered.sort((a, b) => {
+      if (sortBy === "price") return a.purchaseCost - b.purchaseCost;
+      if (sortBy === "hp") return b.horsepower - a.horsepower;
+      return a.model.localeCompare(b.model);
+    });
+
+    return filtered;
+  }, [searchQuery, filterTag, sortBy]);
+
+  const handlePurchase = async (catalogItem: LocomotiveCatalogItem, quantity: number) => {
+    const totalCost = catalogItem.purchaseCost * quantity;
+    
+    if (stats.cash < totalCost) {
       toast({
         title: "Insufficient Funds",
-        description: `You need $${catalogItem.purchaseCost.toLocaleString()} to purchase this locomotive.`,
+        description: `You need $${totalCost.toLocaleString()} to purchase ${quantity} locomotive${quantity > 1 ? 's' : ''}.`,
         variant: "destructive",
       });
       return;
@@ -40,45 +62,56 @@ export default function Shop() {
 
     setLoading(true);
     try {
+      const db = getDbOrThrow();
       const playerRef = doc(db, "players", user.uid);
-      const nextId = stats.nextLocoId;
-      const unitNumber = `#${nextId.toString().padStart(4, "0")}`;
+      let nextId = stats.nextLocoId;
+      const newLocos = [];
 
-      const newLoco = {
-        id: crypto.randomUUID(),
-        unitNumber,
-        model: catalogItem.model,
-        manufacturer: catalogItem.manufacturer,
-        tier: catalogItem.tier,
-        horsepower: catalogItem.horsepower,
-        topSpeed: catalogItem.topSpeed,
-        weight: catalogItem.weight,
-        tractiveEffort: catalogItem.tractiveEffort,
-        fuelCapacity: catalogItem.fuelCapacity,
-        fuelEfficiency: catalogItem.fuelEfficiency,
-        reliability: catalogItem.reliability,
-        maintenanceCost: catalogItem.maintenanceCost,
-        purchaseCost: catalogItem.purchaseCost,
-        resaleValue: catalogItem.resaleValue,
-        scrapValue: Math.floor(catalogItem.purchaseCost * 0.3),
-        mileage: 0,
-        paintCondition: 100,
-        status: "available" as const,
-        purchasedAt: Date.now(),
-        notes: catalogItem.notes,
-      };
+      for (let i = 0; i < quantity; i++) {
+        const unitNumber = `#${nextId.toString().padStart(4, "0")}`;
+        
+        const newLoco = {
+          id: crypto.randomUUID(),
+          unitNumber,
+          model: catalogItem.model,
+          manufacturer: catalogItem.manufacturer,
+          tier: catalogItem.tier,
+          tags: catalogItem.tags,
+          horsepower: catalogItem.horsepower,
+          topSpeed: catalogItem.topSpeed,
+          weight: catalogItem.weight,
+          tractiveEffort: catalogItem.tractiveEffort,
+          fuelCapacity: catalogItem.fuelCapacity,
+          fuelEfficiency: catalogItem.fuelEfficiency,
+          reliability: catalogItem.reliability,
+          maintenanceCost: catalogItem.maintenanceCost,
+          purchaseCost: catalogItem.purchaseCost,
+          resaleValue: catalogItem.resaleValue,
+          scrapValue: Math.floor(catalogItem.purchaseCost * 0.3),
+          mileage: 0,
+          health: 100,
+          paintCondition: 100,
+          status: "available" as const,
+          purchasedAt: Date.now(),
+          notes: catalogItem.notes,
+        };
+
+        newLocos.push(newLoco);
+        nextId++;
+      }
 
       await updateDoc(playerRef, {
-        locomotives: [...playerData.locomotives, newLoco],
-        "stats.cash": stats.cash - catalogItem.purchaseCost,
-        "stats.nextLocoId": nextId + 1,
+        locomotives: [...playerData.locomotives, ...newLocos],
+        "stats.cash": stats.cash - totalCost,
+        "stats.nextLocoId": nextId,
       });
 
       await refreshPlayerData();
       setSelectedLoco(null);
+      setBulkQuantity(1);
       toast({
         title: "Locomotive Purchased!",
-        description: `${catalogItem.model} ${unitNumber} added to your fleet`,
+        description: `${quantity} x ${catalogItem.model} added to your fleet for $${totalCost.toLocaleString()}`,
       });
     } catch (error) {
       console.error(error);
@@ -92,187 +125,110 @@ export default function Shop() {
     }
   };
 
-  const canAfford = (price: number) => stats.cash >= price;
+  const canAfford = (price: number, quantity: number = 1) => stats.cash >= (price * quantity);
 
   return (
     <div className="max-w-7xl mx-auto p-6 space-y-6">
       <div>
-        <h1 className="text-3xl font-accent font-bold">Locomotive Shop</h1>
+        <h1 className="text-3xl font-accent font-bold" data-testid="text-shop-title">Locomotive Shop</h1>
         <p className="text-muted-foreground">
-          Purchase locomotives to expand your fleet
+          Purchase locomotives to expand your fleet - all models available!
         </p>
       </div>
 
-      {/* Tier 1 */}
-      <div className="space-y-4">
-        <div className="flex items-center gap-2">
-          <h2 className="text-2xl font-accent font-semibold">Tier 1: Local Freight</h2>
-          <Badge>Unlocked</Badge>
+      {/* Search and Filter */}
+      <div className="flex flex-col md:flex-row gap-4">
+        <div className="flex-1 relative">
+          <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+          <Input
+            placeholder="Search by model or manufacturer..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="pl-10"
+            data-testid="input-search-locomotives"
+          />
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {LOCOMOTIVE_CATALOG.filter((l) => l.tier === 1).map((loco, idx) => (
-            <Card
-              key={idx}
-              className="hover-elevate cursor-pointer"
-              onClick={() => setSelectedLoco(loco)}
-              data-testid={`card-shop-loco-${idx}`}
-            >
-              <CardHeader>
-                <CardTitle className="text-lg">{loco.model}</CardTitle>
-                <CardDescription>{loco.manufacturer}</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid grid-cols-2 gap-2 text-sm">
-                  <div className="flex items-center gap-1">
-                    <Zap className="w-3 h-3 text-muted-foreground" />
-                    <span>{loco.horsepower} HP</span>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <TrendingUp className="w-3 h-3 text-muted-foreground" />
-                    <span>{loco.topSpeed} MPH</span>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <Gauge className="w-3 h-3 text-muted-foreground" />
-                    <span>{loco.reliability}%</span>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <Weight className="w-3 h-3 text-muted-foreground" />
-                    <span>{loco.weight} tons</span>
-                  </div>
-                </div>
-                <div className="flex items-center justify-between pt-2 border-t">
-                  <span className="text-xl font-bold">
-                    ${loco.purchaseCost.toLocaleString()}
-                  </span>
-                  <Badge variant={canAfford(loco.purchaseCost) ? "default" : "secondary"}>
-                    {canAfford(loco.purchaseCost) ? "Can Afford" : "Too Expensive"}
+        <Select value={filterTag} onValueChange={(v: any) => setFilterTag(v)}>
+          <SelectTrigger className="w-full md:w-[200px]" data-testid="select-filter-tag">
+            <Filter className="h-4 w-4 mr-2" />
+            <SelectValue placeholder="Filter by tag" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Locomotives</SelectItem>
+            <SelectItem value="Local / Yard">Local / Yard</SelectItem>
+            <SelectItem value="Long Haul">Long Haul</SelectItem>
+          </SelectContent>
+        </Select>
+        <Select value={sortBy} onValueChange={(v: any) => setSortBy(v)}>
+          <SelectTrigger className="w-full md:w-[200px]" data-testid="select-sort-by">
+            <SelectValue placeholder="Sort by" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="price">Price (Low to High)</SelectItem>
+            <SelectItem value="hp">Horsepower (High to Low)</SelectItem>
+            <SelectItem value="name">Name (A-Z)</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
+      {/* Locomotive Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        {filteredAndSortedLocos.map((loco, idx) => (
+          <Card
+            key={idx}
+            className="hover-elevate cursor-pointer"
+            onClick={() => setSelectedLoco(loco)}
+            data-testid={`card-shop-loco-${idx}`}
+          >
+            <CardHeader>
+              <CardTitle className="text-lg">{loco.model}</CardTitle>
+              <CardDescription>{loco.manufacturer}</CardDescription>
+              <div className="flex gap-1 flex-wrap mt-2">
+                {loco.tags.map((tag, i) => (
+                  <Badge key={i} variant="outline" className="text-xs">
+                    <Tag className="w-3 h-3 mr-1" />
+                    {tag}
                   </Badge>
+                ))}
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-2 gap-2 text-sm">
+                <div className="flex items-center gap-1">
+                  <Zap className="w-3 h-3 text-muted-foreground" />
+                  <span>{loco.horsepower} HP</span>
                 </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
+                <div className="flex items-center gap-1">
+                  <TrendingUp className="w-3 h-3 text-muted-foreground" />
+                  <span>{loco.topSpeed} MPH</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <Fuel className="w-3 h-3 text-muted-foreground" />
+                  <span>{loco.fuelCapacity} gal</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <Gauge className="w-3 h-3 text-muted-foreground" />
+                  <span>{loco.reliability}%</span>
+                </div>
+              </div>
+              <div className="flex items-center justify-between pt-2 border-t">
+                <span className="text-xl font-bold">
+                  ${loco.purchaseCost.toLocaleString()}
+                </span>
+                <Badge variant={canAfford(loco.purchaseCost) ? "default" : "secondary"}>
+                  {canAfford(loco.purchaseCost) ? "Can Afford" : "Too Expensive"}
+                </Badge>
+              </div>
+            </CardContent>
+          </Card>
+        ))}
       </div>
 
-      {/* Tier 2 */}
-      <div className="space-y-4">
-        <div className="flex items-center gap-2">
-          <h2 className="text-2xl font-accent font-semibold">Tier 2: Mainline Freight</h2>
-          {stats.level >= 10 ? (
-            <Badge>Unlocked</Badge>
-          ) : (
-            <Badge variant="secondary">
-              <Lock className="w-3 h-3 mr-1" />
-              Level 10
-            </Badge>
-          )}
+      {filteredAndSortedLocos.length === 0 && (
+        <div className="text-center py-12 text-muted-foreground">
+          No locomotives match your search criteria
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {LOCOMOTIVE_CATALOG.filter((l) => l.tier === 2).map((loco, idx) => (
-            <Card
-              key={idx}
-              className={stats.level >= 10 ? "hover-elevate cursor-pointer" : "opacity-50"}
-              onClick={() => stats.level >= 10 && setSelectedLoco(loco)}
-              data-testid={`card-shop-loco-tier2-${idx}`}
-            >
-              <CardHeader>
-                <CardTitle className="text-lg">{loco.model}</CardTitle>
-                <CardDescription>{loco.manufacturer}</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid grid-cols-2 gap-2 text-sm">
-                  <div className="flex items-center gap-1">
-                    <Zap className="w-3 h-3 text-muted-foreground" />
-                    <span>{loco.horsepower} HP</span>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <TrendingUp className="w-3 h-3 text-muted-foreground" />
-                    <span>{loco.topSpeed} MPH</span>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <Gauge className="w-3 h-3 text-muted-foreground" />
-                    <span>{loco.reliability}%</span>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <Weight className="w-3 h-3 text-muted-foreground" />
-                    <span>{loco.weight} tons</span>
-                  </div>
-                </div>
-                <div className="flex items-center justify-between pt-2 border-t">
-                  <span className="text-xl font-bold">
-                    ${loco.purchaseCost.toLocaleString()}
-                  </span>
-                  {stats.level >= 10 && (
-                    <Badge variant={canAfford(loco.purchaseCost) ? "default" : "secondary"}>
-                      {canAfford(loco.purchaseCost) ? "Can Afford" : "Too Expensive"}
-                    </Badge>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      </div>
-
-      {/* Tier 3 */}
-      <div className="space-y-4">
-        <div className="flex items-center gap-2">
-          <h2 className="text-2xl font-accent font-semibold">Tier 3: Special Freight</h2>
-          {stats.level >= 50 ? (
-            <Badge>Unlocked</Badge>
-          ) : (
-            <Badge variant="secondary">
-              <Lock className="w-3 h-3 mr-1" />
-              Level 50
-            </Badge>
-          )}
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {LOCOMOTIVE_CATALOG.filter((l) => l.tier === 3).map((loco, idx) => (
-            <Card
-              key={idx}
-              className={stats.level >= 50 ? "hover-elevate cursor-pointer" : "opacity-50"}
-              onClick={() => stats.level >= 50 && setSelectedLoco(loco)}
-              data-testid={`card-shop-loco-tier3-${idx}`}
-            >
-              <CardHeader>
-                <CardTitle className="text-lg">{loco.model}</CardTitle>
-                <CardDescription>{loco.manufacturer}</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid grid-cols-2 gap-2 text-sm">
-                  <div className="flex items-center gap-1">
-                    <Zap className="w-3 h-3 text-muted-foreground" />
-                    <span>{loco.horsepower} HP</span>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <TrendingUp className="w-3 h-3 text-muted-foreground" />
-                    <span>{loco.topSpeed} MPH</span>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <Gauge className="w-3 h-3 text-muted-foreground" />
-                    <span>{loco.reliability}%</span>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <Weight className="w-3 h-3 text-muted-foreground" />
-                    <span>{loco.weight} tons</span>
-                  </div>
-                </div>
-                <div className="flex items-center justify-between pt-2 border-t">
-                  <span className="text-xl font-bold">
-                    ${loco.purchaseCost.toLocaleString()}
-                  </span>
-                  {stats.level >= 50 && (
-                    <Badge variant={canAfford(loco.purchaseCost) ? "default" : "secondary"}>
-                      {canAfford(loco.purchaseCost) ? "Can Afford" : "Too Expensive"}
-                    </Badge>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      </div>
+      )}
 
       {/* Purchase Dialog */}
       <Dialog open={!!selectedLoco} onOpenChange={(open) => !open && setSelectedLoco(null)}>
@@ -284,6 +240,14 @@ export default function Shop() {
                   {selectedLoco.model}
                 </DialogTitle>
                 <DialogDescription>{selectedLoco.manufacturer}</DialogDescription>
+                <div className="flex gap-1 flex-wrap mt-2">
+                  {selectedLoco.tags.map((tag, i) => (
+                    <Badge key={i} variant="outline">
+                      <Tag className="w-3 h-3 mr-1" />
+                      {tag}
+                    </Badge>
+                  ))}
+                </div>
               </DialogHeader>
 
               <div className="space-y-4">
@@ -321,12 +285,36 @@ export default function Shop() {
                   <p className="text-sm">{selectedLoco.notes}</p>
                 </div>
 
+                <Separator />
+
+                {/* Bulk Purchase */}
+                <div className="space-y-2">
+                  <Label htmlFor="quantity">Quantity (1-999)</Label>
+                  <Input
+                    id="quantity"
+                    type="number"
+                    min="1"
+                    max="999"
+                    value={bulkQuantity}
+                    onChange={(e) => setBulkQuantity(Math.min(999, Math.max(1, parseInt(e.target.value) || 1)))}
+                    data-testid="input-bulk-quantity"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Purchase multiple units at once
+                  </p>
+                </div>
+
                 <div className="flex items-center justify-between p-4 bg-muted rounded-md">
                   <div>
-                    <div className="text-sm text-muted-foreground">Purchase Price</div>
+                    <div className="text-sm text-muted-foreground">Total Cost</div>
                     <div className="text-2xl font-bold">
-                      ${selectedLoco.purchaseCost.toLocaleString()}
+                      ${(selectedLoco.purchaseCost * bulkQuantity).toLocaleString()}
                     </div>
+                    {bulkQuantity > 1 && (
+                      <div className="text-xs text-muted-foreground">
+                        ${selectedLoco.purchaseCost.toLocaleString()} × {bulkQuantity}
+                      </div>
+                    )}
                   </div>
                   <div>
                     <div className="text-sm text-muted-foreground">Your Cash</div>
@@ -338,16 +326,16 @@ export default function Shop() {
               </div>
 
               <DialogFooter>
-                <Button variant="outline" onClick={() => setSelectedLoco(null)}>
+                <Button variant="outline" onClick={() => setSelectedLoco(null)} data-testid="button-cancel-purchase">
                   Cancel
                 </Button>
                 <Button
-                  onClick={() => handlePurchase(selectedLoco)}
-                  disabled={loading || !canAfford(selectedLoco.purchaseCost)}
+                  onClick={() => handlePurchase(selectedLoco, bulkQuantity)}
+                  disabled={loading || !canAfford(selectedLoco.purchaseCost, bulkQuantity)}
                   data-testid="button-confirm-purchase"
                 >
                   <DollarSign className="w-4 h-4 mr-2" />
-                  Purchase
+                  Purchase {bulkQuantity > 1 ? `(${bulkQuantity})` : ''}
                 </Button>
               </DialogFooter>
             </>

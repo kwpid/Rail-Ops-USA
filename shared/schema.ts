@@ -36,7 +36,8 @@ export const locomotiveSchema = z.object({
   unitNumber: z.string(), // e.g. "#0001"
   model: z.string(),
   manufacturer: z.string(),
-  tier: z.number().int().min(1).max(3), // 1=Local, 2=Mainline, 3=Special
+  tier: z.number().int().min(1).max(3), // 1=Local, 2=Mainline, 3=Special (kept for backwards compatibility)
+  tags: z.array(z.enum(["Local / Yard", "Long Haul"])).default([]), // New tag system
   horsepower: z.number().int().positive(),
   topSpeed: z.number().int().positive(), // mph
   weight: z.number().positive(), // tons
@@ -49,12 +50,39 @@ export const locomotiveSchema = z.object({
   resaleValue: z.number().int().positive(),
   scrapValue: z.number().int().positive(), // 30% of purchase
   mileage: z.number().default(0),
+  health: z.number().min(0).max(100).default(100), // 100 = perfect, 0 = needs scrapping
   paintCondition: z.number().min(0).max(100).default(100),
-  status: z.enum(["available", "assigned"]).default("available"),
+  paintSchemeId: z.string().optional(), // Reference to paint scheme
+  status: z.enum(["available", "assigned", "needs_repair", "in_paint_shop", "stored"]).default("available"),
   assignedJobId: z.string().optional(),
   purchasedAt: z.number(),
   notes: z.string().optional(),
 });
+
+// ============================================================================
+// PAINT SCHEME SCHEMAS
+// ============================================================================
+
+export const paintSchemeSchema = z.object({
+  id: z.string(), // Firestore document ID
+  name: z.string().min(1).max(50),
+  primaryColor: z.string(), // hex color
+  secondaryColor: z.string(), // hex color
+  accentColor: z.string().optional(), // hex color
+  stripePattern: z.enum(["solid", "striped", "checkered", "custom"]).default("solid"),
+  createdAt: z.number(),
+});
+
+export const insertPaintSchemeSchema = paintSchemeSchema.omit({ id: true, createdAt: true });
+export type PaintScheme = z.infer<typeof paintSchemeSchema>;
+export type InsertPaintScheme = z.infer<typeof insertPaintSchemeSchema>;
+
+// Paint application costs
+export const PAINT_COSTS = {
+  SINGLE_LOCO: 5000, // $5,000 to paint one locomotive
+  ALL_LOCOS_PER_UNIT: 3500, // $3,500 per loco when painting all (bulk discount)
+  DOWNTIME_MINUTES: 10, // 10 minutes out of service
+};
 
 // ============================================================================
 // JOB SCHEMAS
@@ -167,6 +195,7 @@ export const playerDataSchema = z.object({
   locomotives: z.array(locomotiveSchema).default([]),
   jobs: z.array(jobSchema).default([]),
   marketData: marketDataSchema.optional(), // supply/demand tracking
+  paintSchemes: z.array(paintSchemeSchema).default([]), // custom paint schemes
 });
 
 // ============================================================================
@@ -187,7 +216,8 @@ export type PlayerData = z.infer<typeof playerDataSchema>;
 export interface LocomotiveCatalogItem {
   model: string;
   manufacturer: string;
-  tier: 1 | 2 | 3;
+  tier: 1 | 2 | 3; // kept for backwards compatibility
+  tags: ("Local / Yard" | "Long Haul")[]; // New tag system
   horsepower: number;
   topSpeed: number;
   weight: number;
@@ -207,6 +237,7 @@ export const LOCOMOTIVE_CATALOG: LocomotiveCatalogItem[] = [
     model: "EMD GP38-2",
     manufacturer: "Electro-Motive Division (EMD)",
     tier: 1,
+    tags: ["Local / Yard"],
     horsepower: 2000,
     topSpeed: 65,
     weight: 125,
@@ -223,6 +254,7 @@ export const LOCOMOTIVE_CATALOG: LocomotiveCatalogItem[] = [
     model: "EMD SW1500",
     manufacturer: "Electro-Motive Division (EMD)",
     tier: 1,
+    tags: ["Local / Yard"],
     horsepower: 1500,
     topSpeed: 60,
     weight: 115,
@@ -239,6 +271,7 @@ export const LOCOMOTIVE_CATALOG: LocomotiveCatalogItem[] = [
     model: "GE B23-7",
     manufacturer: "General Electric (GE)",
     tier: 1,
+    tags: ["Local / Yard", "Long Haul"],
     horsepower: 2250,
     topSpeed: 70,
     weight: 130,
@@ -257,6 +290,7 @@ export const LOCOMOTIVE_CATALOG: LocomotiveCatalogItem[] = [
     model: "EMD SD40-2",
     manufacturer: "Electro-Motive Division (EMD)",
     tier: 2,
+    tags: ["Long Haul"],
     horsepower: 3000,
     topSpeed: 70,
     weight: 185,
@@ -273,6 +307,7 @@ export const LOCOMOTIVE_CATALOG: LocomotiveCatalogItem[] = [
     model: "GE C30-7",
     manufacturer: "General Electric (GE)",
     tier: 2,
+    tags: ["Long Haul"],
     horsepower: 3000,
     topSpeed: 70,
     weight: 195,
@@ -289,6 +324,7 @@ export const LOCOMOTIVE_CATALOG: LocomotiveCatalogItem[] = [
     model: "EMD GP50",
     manufacturer: "Electro-Motive Division (EMD)",
     tier: 2,
+    tags: ["Long Haul"],
     horsepower: 3500,
     topSpeed: 75,
     weight: 145,
@@ -307,6 +343,7 @@ export const LOCOMOTIVE_CATALOG: LocomotiveCatalogItem[] = [
     model: "EMD SD70MAC",
     manufacturer: "Electro-Motive Division (EMD)",
     tier: 3,
+    tags: ["Long Haul"],
     horsepower: 4000,
     topSpeed: 75,
     weight: 210,
@@ -323,6 +360,7 @@ export const LOCOMOTIVE_CATALOG: LocomotiveCatalogItem[] = [
     model: "GE AC4400CW",
     manufacturer: "General Electric (GE)",
     tier: 3,
+    tags: ["Long Haul"],
     horsepower: 4400,
     topSpeed: 75,
     weight: 215,
@@ -339,6 +377,7 @@ export const LOCOMOTIVE_CATALOG: LocomotiveCatalogItem[] = [
     model: "EMD SD90MAC",
     manufacturer: "Electro-Motive Division (EMD)",
     tier: 3,
+    tags: ["Long Haul"],
     horsepower: 6000,
     topSpeed: 75,
     weight: 230,
@@ -435,4 +474,42 @@ export function getUnlocksForLevel(level: number): string[] {
   if (level === 10) unlocks.push("Mainline Freight Jobs");
   if (level === 50) unlocks.push("Special Freight Jobs");
   return unlocks;
+}
+
+// ============================================================================
+// LOCOMOTIVE DEGRADATION SYSTEM
+// ============================================================================
+
+export const DEGRADATION_THRESHOLDS = {
+  MINOR_REPAIR_MILES: 200000, // Start showing wear after 200K miles
+  MAJOR_REPAIR_MILES: 500000, // Needs major repairs after 500K miles
+  SCRAP_CONSIDERATION_MILES: 1000000, // Consider scrapping after 1M miles
+  HEALTH_DEGRADATION_RATE: 0.00001, // Health reduces by 1% per 10K miles
+};
+
+export function calculateLocomotiveHealth(mileage: number, baseReliability: number): number {
+  // Calculate health based on mileage
+  // Locomotives lose health gradually, but very slowly
+  const mileagePenalty = mileage * DEGRADATION_THRESHOLDS.HEALTH_DEGRADATION_RATE;
+  const health = Math.max(0, Math.min(100, 100 - mileagePenalty));
+  return Math.round(health);
+}
+
+export function getLocomotiveConditionStatus(mileage: number, health: number): {
+  status: "excellent" | "good" | "fair" | "needs_minor_repair" | "needs_major_repair" | "critical";
+  label: string;
+} {
+  if (health >= 90 && mileage < DEGRADATION_THRESHOLDS.MINOR_REPAIR_MILES) {
+    return { status: "excellent", label: "Excellent Condition" };
+  } else if (health >= 75) {
+    return { status: "good", label: "Good Condition" };
+  } else if (health >= 50) {
+    return { status: "fair", label: "Fair Condition" };
+  } else if (health >= 30) {
+    return { status: "needs_minor_repair", label: "Needs Minor Repair" };
+  } else if (health >= 10) {
+    return { status: "needs_major_repair", label: "Needs Major Repair" };
+  } else {
+    return { status: "critical", label: "Critical - Consider Scrapping" };
+  }
 }

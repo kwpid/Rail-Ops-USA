@@ -6,7 +6,7 @@ import {
   type User as FirebaseUser,
 } from "firebase/auth";
 import { doc, getDoc, setDoc, onSnapshot } from "firebase/firestore";
-import { auth, googleProvider, db } from "@/lib/firebase";
+import { getAuthOrThrow, getGoogleProviderOrThrow, getDbOrThrow, firebaseConfigured } from "@/lib/firebase";
 import type { PlayerData } from "@shared/schema";
 
 interface AuthContextType {
@@ -35,7 +35,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const refreshPlayerData = async () => {
     // Real-time sync is handled by onSnapshot, this is just for manual refresh if needed
+    if (!firebaseConfigured) return;
     if (user) {
+      const db = getDbOrThrow();
       const docRef = doc(db, "players", user.uid);
       const docSnap = await getDoc(docRef);
       if (docSnap.exists()) {
@@ -45,6 +47,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   useEffect(() => {
+    if (!firebaseConfigured) {
+      setLoading(false);
+      return;
+    }
+
+    const auth = getAuthOrThrow();
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       setUser(firebaseUser);
       setLoading(false);
@@ -55,11 +63,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   // Real-time sync: Subscribe to player document changes
   useEffect(() => {
+    if (!firebaseConfigured) return;
     if (!user) {
       setPlayerData(null);
       return;
     }
 
+    const db = getDbOrThrow();
     const docRef = doc(db, "players", user.uid);
     const unsubscribe = onSnapshot(docRef, (docSnap) => {
       if (docSnap.exists()) {
@@ -73,7 +83,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [user]);
 
   const signInWithGoogle = async () => {
+    if (!firebaseConfigured) {
+      throw new Error("Firebase is not configured. Please contact support.");
+    }
+
     try {
+      const auth = getAuthOrThrow();
+      const googleProvider = getGoogleProviderOrThrow();
+      const db = getDbOrThrow();
+      
       const result = await signInWithPopup(auth, googleProvider);
       const userDoc = doc(db, "players", result.user.uid);
       const userSnap = await getDoc(userDoc);
@@ -96,6 +114,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           },
           locomotives: [],
           jobs: [],
+          paintSchemes: [],
         };
 
         await setDoc(userDoc, initialData);
@@ -108,7 +127,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const signOut = async () => {
+    if (!firebaseConfigured) return;
+    
     try {
+      const auth = getAuthOrThrow();
       await firebaseSignOut(auth);
       setPlayerData(null);
     } catch (error) {
