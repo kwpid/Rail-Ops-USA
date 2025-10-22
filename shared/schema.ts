@@ -78,17 +78,37 @@ export const jobSchema = z.object({
   freightType: z.string(), // e.g. "Coal", "Intermodal", "Grain", "Chemicals"
   demandLevel: z.enum(["low", "medium", "high", "critical"]).default("medium"),
   carCount: z.number().int().positive(),
-  manifest: z.array(carManifestSchema), // detailed breakdown of cars
+  manifest: z.array(carManifestSchema).default([]), // detailed breakdown of cars
   hpRequired: z.number().int().positive(),
   payout: z.number().int().positive(),
-  timeMinutes: z.number().positive(), // changed from timeHours for more precision
+  timeMinutes: z.number().positive().optional(), // new field, optional for backward compatibility
+  timeHours: z.number().positive().optional(), // legacy field, optional for backward compatibility
   xpReward: z.number().int().positive(),
   status: z.enum(["available", "in_progress", "completed"]).default("available"),
   assignedLocos: z.array(z.string()).optional(), // array of loco IDs
   startedAt: z.number().optional(),
   completesAt: z.number().optional(),
   progressPercent: z.number().min(0).max(100).optional(), // for UI display
-  generatedAt: z.number(), // when the job was created (for hourly refresh)
+  generatedAt: z.number().default(() => Date.now()), // when the job was created (for hourly refresh)
+}).transform((data) => {
+  // Backward compatibility: convert timeHours to timeMinutes if needed
+  if (data.timeMinutes === undefined && data.timeHours !== undefined) {
+    data.timeMinutes = data.timeHours * 60;
+  }
+  // Default timeMinutes if neither exists
+  if (data.timeMinutes === undefined) {
+    data.timeMinutes = 60;
+  }
+  // Generate default manifest if empty
+  if (data.manifest.length === 0) {
+    data.manifest = [{
+      carType: "Boxcar",
+      content: "General Freight",
+      count: data.carCount,
+      weight: 80,
+    }];
+  }
+  return data;
 });
 
 export type CarManifest = z.infer<typeof carManifestSchema>;

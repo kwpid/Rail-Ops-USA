@@ -312,7 +312,7 @@ export default function Jobs() {
     try {
       const playerRef = doc(db, "players", user.uid);
       const now = Date.now();
-      const completionTime = now + selectedJob.timeMinutes * 60 * 1000;
+      const completionTime = now + (selectedJob.timeMinutes || 60) * 60 * 1000;
 
       const updatedJobs = playerData.jobs.map((j) =>
         j.id === selectedJob.id
