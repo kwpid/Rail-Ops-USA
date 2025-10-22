@@ -25,8 +25,17 @@ export default function AchievementsPage() {
   const weeklyAchievements = achievements.filter(a => a.type === "weekly");
   const careerAchievements = achievements.filter(a => a.type === "career");
   const eventAchievements = achievements.filter(a => a.type === "event");
+  
+  const stats = playerData.stats || {
+    cash: 0,
+    xp: 0,
+    level: 1,
+    nextLocoId: 1,
+    points: 0,
+    totalJobsCompleted: 0,
+  };
 
-  const totalPoints = playerData.stats.points || 0;
+  const totalPoints = stats.points || 0;
 
   const handleClaimReward = async (achievement: Achievement) => {
     if (!user || !playerData || achievement.isCompleted || claimingId) return;
@@ -44,8 +53,8 @@ export default function AchievementsPage() {
 
       await safeUpdateDoc(playerDocRef, {
         achievements: updatedAchievements,
-        "stats.points": playerData.stats.points + achievement.rewards.points,
-        "stats.cash": playerData.stats.cash + achievement.rewards.cash,
+        "stats.points": stats.points + achievement.rewards.points,
+        "stats.cash": stats.cash + achievement.rewards.cash,
       });
 
       toast({

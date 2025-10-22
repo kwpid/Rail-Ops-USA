@@ -20,16 +20,25 @@ export default function HeritageSchemesPage() {
     return <div className="p-6">Loading heritage paint schemes...</div>;
   }
 
-  const canAccessHeritage = playerData.stats.level >= 25;
+  const stats = playerData.stats || {
+    cash: 0,
+    xp: 0,
+    level: 1,
+    nextLocoId: 1,
+    points: 0,
+    totalJobsCompleted: 0,
+  };
+  
+  const canAccessHeritage = stats.level >= 25;
   // Defensive defaults for legacy players without heritage schemes
   const availableSchemes = playerData.heritagePaintSchemes || [];
   const purchasedSchemes = availableSchemes.filter(s => s.isPurchased);
-  const points = playerData.stats.points || 0;
+  const points = stats.points || 0;
 
   const handlePurchase = async (scheme: HeritagePaintScheme) => {
     if (!user || !playerData || purchasingId) return;
 
-    if (playerData.stats.level < scheme.levelRequired) {
+    if (stats.level < scheme.levelRequired) {
       toast({
         title: "Level Required",
         description: `You need to reach level ${scheme.levelRequired} to purchase this heritage scheme.`,
@@ -38,7 +47,7 @@ export default function HeritageSchemesPage() {
       return;
     }
 
-    if (playerData.stats.cash < scheme.purchaseCost) {
+    if (stats.cash < scheme.purchaseCost) {
       toast({
         title: "Insufficient Funds",
         description: `You need $${scheme.purchaseCost.toLocaleString()} to purchase this scheme.`,
@@ -67,7 +76,7 @@ export default function HeritageSchemesPage() {
 
       await safeUpdateDoc(playerDocRef, {
         heritagePaintSchemes: updatedSchemes,
-        "stats.cash": playerData.stats.cash - scheme.purchaseCost,
+        "stats.cash": stats.cash - scheme.purchaseCost,
         "stats.points": points - scheme.pointsCost,
       });
 
@@ -131,8 +140,8 @@ export default function HeritageSchemesPage() {
   const renderScheme = (scheme: HeritagePaintScheme) => {
     const isPurchased = scheme.isPurchased;
     const isApplied = !!scheme.appliedToLocoId;
-    const canAfford = playerData.stats.cash >= scheme.purchaseCost && playerData.stats.points >= scheme.pointsCost;
-    const meetsLevel = playerData.stats.level >= scheme.levelRequired;
+    const canAfford = stats.cash >= scheme.purchaseCost && stats.points >= scheme.pointsCost;
+    const meetsLevel = stats.level >= scheme.levelRequired;
     const availableLocos = playerData.locomotives.filter(l => !l.heritagePaintSchemeId);
 
     return (
@@ -184,7 +193,7 @@ export default function HeritageSchemesPage() {
                     <DollarSign className="h-4 w-4" />
                     Cash Cost:
                   </span>
-                  <span className={playerData.stats.cash >= scheme.purchaseCost ? "" : "text-red-600 dark:text-red-400"} data-testid={`cost-cash-${scheme.id}`}>
+                  <span className={stats.cash >= scheme.purchaseCost ? "" : "text-red-600 dark:text-red-400"} data-testid={`cost-cash-${scheme.id}`}>
                     ${scheme.purchaseCost.toLocaleString()}
                   </span>
                 </div>
@@ -193,7 +202,7 @@ export default function HeritageSchemesPage() {
                     <Coins className="h-4 w-4" />
                     Points Cost:
                   </span>
-                  <span className={playerData.stats.points >= scheme.pointsCost ? "" : "text-red-600 dark:text-red-400"} data-testid={`cost-points-${scheme.id}`}>
+                  <span className={stats.points >= scheme.pointsCost ? "" : "text-red-600 dark:text-red-400"} data-testid={`cost-points-${scheme.id}`}>
                     {scheme.pointsCost} points
                   </span>
                 </div>
@@ -273,7 +282,7 @@ export default function HeritageSchemesPage() {
             <div className="text-sm text-muted-foreground">Your Points</div>
             <div className="text-2xl font-bold text-amber-600 dark:text-amber-400 flex items-center gap-2" data-testid="text-user-points">
               <Coins className="h-5 w-5" />
-              {playerData.stats.points}
+              {stats.points}
             </div>
           </div>
         </div>
@@ -283,7 +292,7 @@ export default function HeritageSchemesPage() {
         <Alert className="mb-6">
           <Lock className="h-4 w-4" />
           <AlertDescription>
-            Heritage paint schemes are unlocked at <strong>Level 25</strong>. You are currently level {playerData.stats.level}.
+            Heritage paint schemes are unlocked at <strong>Level 25</strong>. You are currently level {stats.level}.
           </AlertDescription>
         </Alert>
       )}

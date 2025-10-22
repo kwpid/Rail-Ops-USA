@@ -42,6 +42,14 @@ export default function Inventory() {
 
   if (!playerData || !user) return null;
 
+  const stats = playerData.stats || {
+    cash: 0,
+    xp: 0,
+    level: 1,
+    nextLocoId: 1,
+    points: 0,
+    totalJobsCompleted: 0,
+  };
   const locomotives = playerData.locomotives;
 
   // Check for completed paint jobs and update status
@@ -123,7 +131,7 @@ export default function Inventory() {
       const db = getDbOrThrow();
       const playerRef = doc(db, "players", user.uid);
       const updatedLocos = locomotives.filter((l) => l.id !== loco.id);
-      const newCash = playerData.stats.cash + loco.resaleValue;
+      const newCash = stats.cash + loco.resaleValue;
 
       await safeUpdateDoc(playerRef, {
         locomotives: updatedLocos,
@@ -156,7 +164,7 @@ export default function Inventory() {
       const db = getDbOrThrow();
       const playerRef = doc(db, "players", user.uid);
       const updatedLocos = locomotives.filter((l) => l.id !== loco.id);
-      const newCash = playerData.stats.cash + loco.scrapValue;
+      const newCash = stats.cash + loco.scrapValue;
 
       await safeUpdateDoc(playerRef, {
         locomotives: updatedLocos,
@@ -200,7 +208,7 @@ export default function Inventory() {
       return;
     }
 
-    if (playerData.stats.cash < 10000) {
+    if (stats.cash < 10000) {
       toast({
         title: "Insufficient Funds",
         description: "Renaming costs $10,000",
@@ -219,7 +227,7 @@ export default function Inventory() {
 
       await safeUpdateDoc(playerRef, {
         locomotives: updatedLocos,
-        "stats.cash": playerData.stats.cash - 10000,
+        "stats.cash": stats.cash - 10000,
       });
 
       await refreshPlayerData();
@@ -286,7 +294,7 @@ export default function Inventory() {
     const paintCompleteAt = now + PAINT_DOWNTIME;
 
     if (applyPaintTarget === "single" && selectedLoco) {
-      if (playerData.stats.cash < 5000) {
+      if (stats.cash < 5000) {
         toast({ title: "Insufficient Funds", description: "Painting one locomotive costs $5,000", variant: "destructive" });
         return;
       }
@@ -299,7 +307,7 @@ export default function Inventory() {
     } else if (applyPaintTarget === "all") {
       const availableLocos = locomotives.filter(l => l.status === "available");
       cost = availableLocos.length * 3500;
-      if (playerData.stats.cash < cost) {
+      if (stats.cash < cost) {
         toast({ title: "Insufficient Funds", description: `Painting all locomotives costs $${cost.toLocaleString()}`, variant: "destructive" });
         return;
       }
@@ -317,7 +325,7 @@ export default function Inventory() {
       
       const updates: any = {
         locomotives: updatedLocos,
-        "stats.cash": playerData.stats.cash - cost,
+        "stats.cash": stats.cash - cost,
       };
 
       // If applying to new locomotives, set a default paint scheme
@@ -351,7 +359,7 @@ export default function Inventory() {
     const PATCH_COST = 800;
     const PATCH_DOWNTIME = 2 * 60 * 1000;
 
-    if (playerData.stats.cash < PATCH_COST) {
+    if (stats.cash < PATCH_COST) {
       toast({ title: "Insufficient Funds", description: `Patching paint costs $${PATCH_COST.toLocaleString()}`, variant: "destructive" });
       return;
     }
@@ -371,7 +379,7 @@ export default function Inventory() {
 
       await safeUpdateDoc(playerRef, {
         locomotives: updatedLocos,
-        "stats.cash": playerData.stats.cash - PATCH_COST,
+        "stats.cash": stats.cash - PATCH_COST,
       });
 
       await refreshPlayerData();

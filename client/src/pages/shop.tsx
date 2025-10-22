@@ -29,7 +29,14 @@ export default function Shop() {
 
   if (!playerData || !user) return null;
 
-  const stats = playerData.stats;
+  const stats = playerData.stats || {
+    cash: 0,
+    xp: 0,
+    level: 1,
+    nextLocoId: 1,
+    points: 0,
+    totalJobsCompleted: 0,
+  };
   const company = playerData.company;
 
   const filteredAndSortedLocos = useMemo(() => {
