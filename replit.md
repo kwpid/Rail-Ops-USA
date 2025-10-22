@@ -2,6 +2,15 @@
 
 A comprehensive railroad management game built with React, Firebase, and TypeScript. Players create their own railroad company, manage locomotives, assign freight jobs, and expand their operations across America.
 
+## Recent Changes
+
+**October 22, 2025:**
+- ✅ Added dedicated Cash stat card to dashboard for clear visibility of actual cash balance
+- ✅ Fixed shop purchase validation to use correct stats.cash field
+- ✅ Removed heritage schemes system entirely (feature not aligned with game design)
+- ✅ Preserved Alpha livery as a special livery (challenge-only reward, not heritage)
+- ✅ Implemented safe migration logic for legacy users who had Alpha unlocked in old heritage system
+
 ## Project Overview
 
 **Tech Stack:**
