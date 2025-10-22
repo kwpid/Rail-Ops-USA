@@ -1,0 +1,188 @@
+# Rail Ops: USA - Railroad Management Simulator
+
+A comprehensive railroad management game built with React, Firebase, and TypeScript. Players create their own railroad company, manage locomotives, assign freight jobs, and expand their operations across America.
+
+## Project Overview
+
+**Tech Stack:**
+- **Frontend:** React 18, TypeScript, Tailwind CSS, Shadcn UI
+- **Backend:** Firebase (Authentication, Firestore)
+- **State Management:** TanStack Query, React Context
+- **Routing:** Wouter
+- **Styling:** Tailwind CSS with custom railroad-themed design tokens
+
+## Architecture
+
+### Authentication Flow
+1. User signs in with Google via Firebase Auth (popup)
+2. On first sign-in, creates initial player document in Firestore
+3. Session persists until manual sign-out
+4. Auth state managed via React Context (`AuthContext`)
+
+### Data Structure (Firestore)
+
+**Collection: `players/{userId}`**
+```typescript
+{
+  player: {
+    id: string,
+    email: string,
+    displayName: string,
+    photoURL?: string,
+    createdAt: number
+  },
+  company?: {
+    name: string,
+    city: string,
+    primaryColor: string,
+    secondaryColor: string,
+    createdAt: number
+  },
+  stats: {
+    cash: number (starts at $500,000),
+    xp: number,
+    level: number,
+    nextLocoId: number (for automatic numbering)
+  },
+  locomotives: Locomotive[],
+  jobs: Job[]
+}
+```
+
+### Game Mechanics
+
+**Company Creation:**
+1. Player selects US city as home base
+2. Chooses company name
+3. Selects color scheme from presets
+4. Receives starter locomotive (EMD GP38-2 #0001)
+
+**Locomotive System:**
+- Automatic unit numbering (#0001, #0002, etc.)
+- Manual renaming for $10,000 (must be unique)
+- Full stat tracking (HP, speed, weight, reliability, etc.)
+- Buy, sell, or scrap options
+- Status: available or assigned to jobs
+
+**Job System:**
+- Three tiers:
+  - Tier 1 (Local Freight): Unlocked from start
+  - Tier 2 (Mainline Freight): Unlocked at Level 10
+  - Tier 3 (Special Freight): Unlocked at Level 50
+- Jobs require minimum HP (can assign multiple locomotives)
+- Completing jobs earns cash and XP
+- Auto-generated jobs based on company city
+
+**Leveling System:**
+- Gain XP by completing jobs
+- Level thresholds defined in XP_PER_LEVEL array
+- Level ups unlock new job tiers
+- Level-up notification shows unlocks
+
+### File Structure
+
+```
+client/src/
+├── components/
+│   ├── ui/ (Shadcn components)
+│   ├── main-layout.tsx (Sidebar + top stats bar)
+│   └── level-up-notification.tsx
+├── contexts/
+│   └── AuthContext.tsx (Firebase auth + player data)
+├── lib/
+│   ├── firebase.ts (Firebase config)
+│   └── queryClient.ts
+├── pages/
+│   ├── auth-page.tsx (Google sign-in)
+│   ├── company-creation.tsx (3-step wizard)
+│   ├── dashboard.tsx (Overview + quick actions)
+│   ├── inventory.tsx (Locomotive management)
+│   ├── jobs.tsx (Job board with tier tabs)
+│   ├── shop.tsx (Purchase locomotives)
+│   └── news.tsx (Updates feed)
+├── App.tsx (Route + auth orchestration)
+└── index.css (Design tokens)
+
+shared/
+└── schema.ts (All TypeScript types, locomotive catalog, cities list)
+```
+
+### Design System
+
+**Colors:**
+- Primary: Railroad Blue (210 80% 45%)
+- Secondary: Industrial Orange (25 70% 50%)
+- Success: Railroad Green (142 70% 45%)
+- Warning: Caution Yellow (45 90% 55%)
+- Dark theme by default
+
+**Typography:**
+- Sans: Inter (UI text)
+- Accent: Rajdhani (Headers, company names)
+- Mono: JetBrains Mono (Unit numbers, stats)
+
+**Icons:**
+- Lucide React for all UI icons
+- Railroad-themed: Train, MapPin, Gauge, etc.
+
+## Key Features
+
+✅ Google Authentication with popup
+✅ Persistent sessions
+✅ Company creation wizard
+✅ Locomotive inventory with detailed stats
+✅ Automatic locomotive numbering system
+✅ Manual unit renaming ($10k cost)
+✅ Three-tier job system with level gating
+✅ Multi-locomotive job assignments
+✅ XP and leveling system
+✅ Level-up notifications with unlock display
+✅ Shop with tier-based locomotive catalog
+✅ Buy/sell/scrap locomotive options
+✅ News feed for updates
+✅ Responsive dark-themed UI
+
+## Environment Variables
+
+Required Firebase secrets (already configured):
+- `VITE_FIREBASE_PROJECT_ID`
+- `VITE_FIREBASE_APP_ID`
+- `VITE_FIREBASE_API_KEY`
+
+## Future Enhancements
+
+- Livery customization system
+- Locomotive degradation (mileage, paint condition)
+- Maintenance and repair mechanics
+- Dynamic job generation based on player level
+- Achievement system
+- Company statistics dashboard
+- Real-time job completion countdown
+- Multiple save slots
+- Leaderboards
+
+## Firebase Security Rules
+
+The Firestore security rules are defined in `firestore.rules` at the project root. 
+
+**To deploy these rules to your Firebase project:**
+
+1. Install Firebase CLI: `npm install -g firebase-tools`
+2. Login to Firebase: `firebase login`
+3. Initialize Firebase in your project: `firebase init firestore`
+   - Select your existing Firebase project
+   - Use `firestore.rules` as your rules file
+   - Skip indexes file or use default
+4. Deploy rules: `firebase deploy --only firestore:rules`
+
+**Rules Overview:**
+- Each player document is scoped to the authenticated user's UID
+- Users can only read/write their own player document (`/players/{userId}`)
+- Data validation ensures cash, XP, and level are always valid values
+- All other paths are explicitly denied
+
+See `firestore.rules` for the complete rule set.
+
+## Development
+
+The app runs on port 5000 with Vite dev server. All Firebase operations are scoped to the authenticated user's document for data isolation.
