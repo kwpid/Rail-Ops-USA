@@ -562,13 +562,17 @@ export default function Jobs() {
   const getNextRefreshTime = () => {
     const now = new Date();
     const minutes = now.getMinutes();
-    const nextRefreshMinute = minutes < 30 ? 30 : 60;
     const nextRefresh = new Date(now);
-    nextRefresh.setMinutes(nextRefreshMinute, 0, 0);
-    if (nextRefreshMinute === 60) {
+    
+    if (minutes < 30) {
+      // Next refresh is at :30 of this hour
+      nextRefresh.setMinutes(30, 0, 0);
+    } else {
+      // Next refresh is at :00 of next hour
       nextRefresh.setHours(nextRefresh.getHours() + 1);
-      nextRefresh.setMinutes(0);
+      nextRefresh.setMinutes(0, 0, 0);
     }
+    
     return nextRefresh;
   };
 

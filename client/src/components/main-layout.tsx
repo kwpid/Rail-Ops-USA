@@ -27,6 +27,7 @@ import {
   Train,
   Briefcase,
   Store,
+  ShoppingCart,
   Newspaper,
   LogOut,
   DollarSign,
@@ -42,6 +43,7 @@ const menuItems = [
   { title: "Inventory", icon: Train, path: "/inventory" },
   { title: "Jobs", icon: Briefcase, path: "/jobs" },
   { title: "Shop", icon: Store, path: "/shop" },
+  { title: "Loaner Trains", icon: ShoppingCart, path: "/loaner-trains" },
   { title: "News", icon: Newspaper, path: "/news" },
 ];
 

@@ -11,6 +11,7 @@ import Dashboard from "@/pages/dashboard";
 import Inventory from "@/pages/inventory";
 import Jobs from "@/pages/jobs";
 import Shop from "@/pages/shop";
+import LoanerTrains from "@/pages/loaner-trains";
 import News from "@/pages/news";
 import NotFound from "@/pages/not-found";
 
@@ -44,6 +45,7 @@ function AppRouter() {
         <Route path="/inventory" component={Inventory} />
         <Route path="/jobs" component={Jobs} />
         <Route path="/shop" component={Shop} />
+        <Route path="/loaner-trains" component={LoanerTrains} />
         <Route path="/news" component={News} />
         <Route component={NotFound} />
       </Switch>

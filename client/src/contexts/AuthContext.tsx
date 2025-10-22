@@ -15,7 +15,7 @@ interface AuthContextType {
   loading: boolean;
   signInWithGoogle: () => Promise<void>;
   signOut: () => Promise<void>;
-  refreshPlayerData: () => Promise<void>;
+  refreshPlayerData: () => Promise<PlayerData | null>;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -33,17 +33,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [playerData, setPlayerData] = useState<PlayerData | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const refreshPlayerData = async () => {
+  const refreshPlayerData = async (): Promise<PlayerData | null> => {
     // Real-time sync is handled by onSnapshot, this is just for manual refresh if needed
-    if (!firebaseConfigured) return;
+    if (!firebaseConfigured) return null;
     if (user) {
       const db = getDbOrThrow();
       const docRef = doc(db, "players", user.uid);
       const docSnap = await getDoc(docRef);
       if (docSnap.exists()) {
-        setPlayerData(docSnap.data() as PlayerData);
+        const data = docSnap.data() as PlayerData;
+        setPlayerData(data);
+        return data;
       }
     }
+    return null;
   };
 
   useEffect(() => {
