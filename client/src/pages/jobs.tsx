@@ -146,10 +146,10 @@ const generateJobs = (tier: 1 | 2 | 3, playerCity: string, playerLevel: number):
     
     for (let i = 0; i < numLocalFreight; i++) {
       const destination = localDestinations[Math.floor(Math.random() * localDestinations.length)];
-      const freightType = FREIGHT_TYPES[Math.floor(Math.random() * FREIGHT_TYPES.length)];
       const distance = 5 + Math.random() * 11; // Short local distances (5-15 miles after floor)
       const carCount = 4 + Math.floor(Math.random() * 8);
-      const manifest = generateManifest(freightType.type, carCount);
+      // Local freight is always manifest (mixed cargo)
+      const manifest = generateManifest("Mixed Manifest", carCount);
       const hpRequired = carCount * 150;
       const timeMinutes = 8 + Math.random() * 7;
       const basePayout = distance * carCount * 25; // Higher rate per mile for local
@@ -162,7 +162,7 @@ const generateJobs = (tier: 1 | 2 | 3, playerCity: string, playerLevel: number):
         origin: `${playerCity} Yard`,
         destination: `${playerCity} ${destination}`,
         distance: Math.floor(distance),
-        freightType: freightType.type,
+        freightType: "Mixed Manifest",
         demandLevel: "medium",
         carCount,
         manifest,
@@ -204,14 +204,18 @@ const generateJobs = (tier: 1 | 2 | 3, playerCity: string, playerLevel: number):
       });
     }
   } else if (tier === 2) {
-    const jobCount = 4;
+    const jobCount = 8; // Spawn more mainline jobs
     for (let i = 0; i < jobCount; i++) {
       const destination = otherCities[Math.floor(Math.random() * otherCities.length)];
       const freightType = FREIGHT_TYPES[Math.floor(Math.random() * FREIGHT_TYPES.length)];
       const distance = 80 + Math.random() * 120;
-      const carCount = 15 + Math.floor(Math.random() * 25);
+      const carCount = 15 + Math.floor(Math.random() * 136); // Up to 150 cars
       const manifest = generateManifest(freightType.type, carCount);
-      const hpRequired = carCount * 200;
+      
+      // Calculate HP based on manifest weight and car count
+      const totalWeight = manifest.reduce((sum, item) => sum + (item.weight * item.count), 0);
+      const hpRequired = Math.floor(totalWeight * 1.5); // 1.5 HP per ton
+      
       const timeMinutes = 45 + Math.random() * 45;
       const basePayout = distance * carCount * 30;
       
@@ -279,8 +283,7 @@ export default function Jobs() {
   const [selectedLocos, setSelectedLocos] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [levelUpInfo, setLevelUpInfo] = useState<{ level: number; unlocks: string[] } | null>(null);
-  const [timeUntilRefresh, setTimeUntilRefresh] = useState<string>("");
-  const [refreshing, setRefreshing] = useState(false);
+  const [currentTime, setCurrentTime] = useState(Date.now());
 
   if (!playerData || !user) return null;
 
@@ -291,9 +294,10 @@ export default function Jobs() {
   useEffect(() => {
     const initializeJobs = async () => {
       if (playerData.jobs.length === 0) {
+        // Spawn all tiers regardless of level (level gating only prevents assignment)
         const tier1 = generateJobs(1, company.city, stats.level);
-        const tier2 = stats.level >= 10 ? generateJobs(2, company.city, stats.level) : [];
-        const tier3 = stats.level >= 50 ? generateJobs(3, company.city, stats.level) : [];
+        const tier2 = generateJobs(2, company.city, stats.level);
+        const tier3 = generateJobs(3, company.city, stats.level);
         
         try {
           const playerRef = doc(db, "players", user.uid);
@@ -333,11 +337,11 @@ export default function Jobs() {
       // If oldest job is less than 29 minutes old, don't refresh yet
       if (jobAge < (29 * 60 * 1000)) return;
       
-      // Refresh jobs - keep ongoing jobs, generate new available jobs
+      // Refresh jobs - keep ongoing jobs, generate new available jobs for all tiers
       const ongoingJobs = playerData.jobs.filter(j => j.status === "in_progress");
       const tier1 = generateJobs(1, company.city, stats.level);
-      const tier2 = stats.level >= 10 ? generateJobs(2, company.city, stats.level) : [];
-      const tier3 = stats.level >= 50 ? generateJobs(3, company.city, stats.level) : [];
+      const tier2 = generateJobs(2, company.city, stats.level);
+      const tier3 = generateJobs(3, company.city, stats.level);
       
       try {
         const playerRef = doc(db, "players", user.uid);
@@ -363,64 +367,14 @@ export default function Jobs() {
     return () => clearInterval(interval);
   }, [playerData.jobs, company.city, stats.level, user.uid, toast]);
 
-  // Timer to show when jobs will refresh
+  // Update current time every second to re-render job progress
   useEffect(() => {
-    const updateTimer = () => {
-      const now = new Date();
-      const minutes = now.getMinutes();
-      const seconds = now.getSeconds();
-      
-      // Calculate time until next refresh (XX:00 or XX:30)
-      let minutesUntilRefresh;
-      if (minutes < 30) {
-        minutesUntilRefresh = 29 - minutes;
-      } else {
-        minutesUntilRefresh = 59 - minutes;
-      }
-      const secondsUntilRefresh = 60 - seconds;
-      
-      setTimeUntilRefresh(`${minutesUntilRefresh}m ${secondsUntilRefresh}s`);
-    };
-    
-    updateTimer();
-    const interval = setInterval(updateTimer, 1000);
+    const interval = setInterval(() => {
+      setCurrentTime(Date.now());
+    }, 1000);
     
     return () => clearInterval(interval);
   }, []);
-
-  // Manual refresh function
-  const handleManualRefresh = async () => {
-    if (refreshing) return;
-    
-    setRefreshing(true);
-    try {
-      const ongoingJobs = playerData.jobs.filter(j => j.status === "in_progress");
-      const tier1 = generateJobs(1, company.city, stats.level);
-      const tier2 = stats.level >= 10 ? generateJobs(2, company.city, stats.level) : [];
-      const tier3 = stats.level >= 50 ? generateJobs(3, company.city, stats.level) : [];
-      
-      const playerRef = doc(db, "players", user.uid);
-      await updateDoc(playerRef, {
-        jobs: [...ongoingJobs, ...tier1, ...tier2, ...tier3],
-      });
-      
-      await refreshPlayerData();
-      
-      toast({
-        title: "Jobs Refreshed",
-        description: "New freight opportunities are now available",
-      });
-    } catch (error) {
-      console.error("Error refreshing jobs:", error);
-      toast({
-        title: "Error",
-        description: "Failed to refresh jobs",
-        variant: "destructive",
-      });
-    } finally {
-      setRefreshing(false);
-    }
-  };
 
   const availableLocos = locomotives.filter((l) => l.status === "available");
   const totalSelectedHP = selectedLocos.reduce((sum, id) => {
@@ -428,8 +382,72 @@ export default function Jobs() {
     return sum + (loco?.horsepower || 0);
   }, 0);
 
+  // Assign random locomotives for a job
+  const handleAssignRandom = () => {
+    if (!selectedJob) return;
+    
+    // Check tier requirement
+    const tierRequirement = selectedJob.tier === 2 ? 10 : selectedJob.tier === 3 ? 50 : 0;
+    if (stats.level < tierRequirement) {
+      toast({
+        title: "Job Locked",
+        description: `This job requires Level ${tierRequirement}. You are Level ${stats.level}.`,
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    // Sort available locos by horsepower (descending)
+    const sortedLocos = [...availableLocos].sort((a, b) => b.horsepower - a.horsepower);
+    
+    // Select locos until we meet HP requirement
+    const selected: string[] = [];
+    let totalHP = 0;
+    
+    for (const loco of sortedLocos) {
+      if (totalHP >= selectedJob.hpRequired) break;
+      selected.push(loco.id);
+      totalHP += loco.horsepower;
+    }
+    
+    // Randomly decide whether to add one more loco (if available and randomly chosen)
+    if (totalHP >= selectedJob.hpRequired && selected.length < sortedLocos.length && Math.random() > 0.7) {
+      const remainingLocos = sortedLocos.filter(l => !selected.includes(l.id));
+      if (remainingLocos.length > 0) {
+        const randomLoco = remainingLocos[Math.floor(Math.random() * remainingLocos.length)];
+        selected.push(randomLoco.id);
+      }
+    }
+    
+    if (totalHP < selectedJob.hpRequired) {
+      toast({
+        title: "Insufficient Horsepower",
+        description: `This job requires ${selectedJob.hpRequired} HP. You only have ${totalHP} HP available.`,
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    setSelectedLocos(selected);
+    toast({
+      title: "Locomotives Selected",
+      description: `${selected.length} locomotive(s) selected with ${totalHP.toLocaleString()} HP`,
+    });
+  };
+
   const handleAssignJob = async () => {
     if (!selectedJob || selectedLocos.length === 0) return;
+
+    // Check tier requirement
+    const tierRequirement = selectedJob.tier === 2 ? 10 : selectedJob.tier === 3 ? 50 : 0;
+    if (stats.level < tierRequirement) {
+      toast({
+        title: "Job Locked",
+        description: `This job requires Level ${tierRequirement}. You are Level ${stats.level}.`,
+        variant: "destructive",
+      });
+      return;
+    }
 
     if (totalSelectedHP < selectedJob.hpRequired) {
       toast({
@@ -469,10 +487,6 @@ export default function Jobs() {
         title: "Job Assigned!",
         description: `${selectedLocos.length} locomotive(s) assigned to ${selectedJob.jobId}`,
       });
-
-      setTimeout(async () => {
-        await completeJob(selectedJob.id);
-      }, 2000);
     } catch (error) {
       console.error(error);
       toast({
@@ -485,7 +499,7 @@ export default function Jobs() {
     }
   };
 
-  const completeJob = async (jobId: string) => {
+  const handleClaimJob = async (jobId: string) => {
     try {
       const playerRef = doc(db, "players", user.uid);
       const job = playerData.jobs.find((j) => j.id === jobId);
@@ -496,9 +510,8 @@ export default function Jobs() {
       const oldLevel = stats.level;
       const newLevel = calculateLevel(newXp);
 
-      const updatedJobs = playerData.jobs.map((j) =>
-        j.id === jobId ? { ...j, status: "completed" as const } : j
-      );
+      // Remove the completed job and free up locomotives
+      const updatedJobs = playerData.jobs.filter((j) => j.id !== jobId);
 
       const updatedLocos = locomotives.map((l) =>
         l.assignedJobId === jobId ? { ...l, status: "available" as const, assignedJobId: undefined } : l
@@ -515,7 +528,7 @@ export default function Jobs() {
       await refreshPlayerData();
 
       toast({
-        title: "Job Completed!",
+        title: "Rewards Claimed!",
         description: `Earned $${job.payout.toLocaleString()} and ${job.xpReward} XP`,
       });
 
@@ -527,6 +540,11 @@ export default function Jobs() {
       }
     } catch (error) {
       console.error(error);
+      toast({
+        title: "Error",
+        description: "Failed to claim job rewards",
+        variant: "destructive",
+      });
     }
   };
 
@@ -550,12 +568,12 @@ export default function Jobs() {
   };
 
   const CurrentJobCard = ({ job }: { job: Job }) => {
-    const now = Date.now();
     const progress = job.completesAt && job.startedAt
-      ? Math.min(100, ((now - job.startedAt) / (job.completesAt - job.startedAt)) * 100)
+      ? Math.min(100, ((currentTime - job.startedAt) / (job.completesAt - job.startedAt)) * 100)
       : 0;
-    const timeRemaining = job.completesAt ? Math.max(0, job.completesAt - now) : 0;
+    const timeRemaining = job.completesAt ? Math.max(0, job.completesAt - currentTime) : 0;
     const minutesRemaining = Math.ceil(timeRemaining / 60000);
+    const isCompleted = timeRemaining === 0;
 
     return (
       <Card className="hover-elevate">
@@ -565,7 +583,9 @@ export default function Jobs() {
               <CardTitle className="font-mono text-lg">{job.jobId}</CardTitle>
               <CardDescription>{job.freightType}</CardDescription>
             </div>
-            <Badge variant="secondary">In Progress</Badge>
+            <Badge variant={isCompleted ? "default" : "secondary"}>
+              {isCompleted ? "Complete" : "In Progress"}
+            </Badge>
           </div>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -579,7 +599,9 @@ export default function Jobs() {
           <div>
             <div className="flex items-center justify-between text-sm mb-2">
               <span className="text-muted-foreground">Progress</span>
-              <span className="font-medium">{minutesRemaining} min remaining</span>
+              <span className="font-medium">
+                {isCompleted ? "Complete!" : `${minutesRemaining} min remaining`}
+              </span>
             </div>
             <Progress value={progress} className="h-2" />
           </div>
@@ -605,6 +627,17 @@ export default function Jobs() {
               <span>{job.xpReward} XP</span>
             </div>
           </div>
+
+          {isCompleted && (
+            <Button 
+              className="w-full" 
+              onClick={() => handleClaimJob(job.id)}
+              data-testid={`button-claim-${job.id}`}
+            >
+              <Package className="w-4 h-4 mr-2" />
+              Claim Rewards
+            </Button>
+          )}
         </CardContent>
       </Card>
     );
@@ -683,28 +716,11 @@ export default function Jobs() {
   return (
     <>
       <div className="max-w-7xl mx-auto p-6 space-y-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-accent font-bold">Job Board</h1>
-            <p className="text-muted-foreground">
-              Available freight jobs from {company.city}
-            </p>
-          </div>
-          <div className="flex items-center gap-3">
-            <div className="text-right">
-              <div className="text-sm text-muted-foreground">Next Refresh</div>
-              <div className="text-lg font-semibold font-mono">{timeUntilRefresh}</div>
-            </div>
-            <Button 
-              onClick={handleManualRefresh} 
-              disabled={refreshing}
-              variant="outline"
-              size="sm"
-            >
-              <RefreshCw className={`w-4 h-4 mr-2 ${refreshing ? 'animate-spin' : ''}`} />
-              Refresh Now
-            </Button>
-          </div>
+        <div>
+          <h1 className="text-3xl font-accent font-bold">Job Board</h1>
+          <p className="text-muted-foreground">
+            Available freight jobs from {company.city}
+          </p>
         </div>
 
         <Tabs defaultValue="current">
@@ -715,13 +731,11 @@ export default function Jobs() {
             <TabsTrigger value="tier1" data-testid="tab-tier1">
               Local Freight
             </TabsTrigger>
-            <TabsTrigger value="tier2" disabled={stats.level < 10} data-testid="tab-tier2">
-              Mainline Freight
-              {stats.level < 10 && <Lock className="w-3 h-3 ml-1" />}
+            <TabsTrigger value="tier2" data-testid="tab-tier2">
+              Mainline Freight {stats.level < 10 && <Lock className="w-3 h-3 ml-1" />}
             </TabsTrigger>
-            <TabsTrigger value="tier3" disabled={stats.level < 50} data-testid="tab-tier3">
-              Special Freight
-              {stats.level < 50 && <Lock className="w-3 h-3 ml-1" />}
+            <TabsTrigger value="tier3" data-testid="tab-tier3">
+              Special Freight {stats.level < 50 && <Lock className="w-3 h-3 ml-1" />}
             </TabsTrigger>
           </TabsList>
 
@@ -896,17 +910,28 @@ export default function Jobs() {
                 </div>
               </div>
 
-              <DialogFooter>
-                <Button variant="outline" onClick={() => setSelectedJob(null)}>
-                  Cancel
-                </Button>
-                <Button
-                  onClick={handleAssignJob}
-                  disabled={loading || selectedLocos.length === 0 || totalSelectedHP < selectedJob.hpRequired}
-                  data-testid="button-assign-job"
+              <DialogFooter className="flex items-center justify-between">
+                <Button 
+                  variant="secondary" 
+                  onClick={handleAssignRandom}
+                  disabled={loading || availableLocos.length === 0}
+                  data-testid="button-assign-random"
                 >
-                  Assign Job
+                  <Zap className="w-4 h-4 mr-2" />
+                  Assign Random
                 </Button>
+                <div className="flex gap-2">
+                  <Button variant="outline" onClick={() => setSelectedJob(null)}>
+                    Cancel
+                  </Button>
+                  <Button
+                    onClick={handleAssignJob}
+                    disabled={loading || selectedLocos.length === 0 || totalSelectedHP < selectedJob.hpRequired}
+                    data-testid="button-assign-job"
+                  >
+                    Assign Job
+                  </Button>
+                </div>
               </DialogFooter>
             </>
           )}
