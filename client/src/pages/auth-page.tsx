@@ -1,8 +1,10 @@
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Loader2, Train } from "lucide-react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Loader2, Train, AlertCircle } from "lucide-react";
 import { useState } from "react";
+import { firebaseConfigured } from "@/lib/firebase";
 
 export default function AuthPage() {
   const { signInWithGoogle } = useAuth();
@@ -40,9 +42,18 @@ export default function AuthPage() {
         </div>
 
         <div className="space-y-4 pt-4">
+          {!firebaseConfigured && (
+            <Alert variant="destructive" data-testid="alert-firebase-config">
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>
+                Firebase authentication is not configured. Please set up your Firebase environment variables to enable sign-in.
+              </AlertDescription>
+            </Alert>
+          )}
+          
           <Button
             onClick={handleSignIn}
-            disabled={isLoading}
+            disabled={isLoading || !firebaseConfigured}
             className="w-full"
             size="lg"
             data-testid="button-google-signin"
