@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -26,10 +26,69 @@ export default function Inventory() {
   const [searchQuery, setSearchQuery] = useState("");
   const [filterStatus, setFilterStatus] = useState<string>("all");
   const [filterTag, setFilterTag] = useState<"all" | "Local / Yard" | "Long Haul">("all");
+  const [showPaintSchemes, setShowPaintSchemes] = useState(false);
+  const [paintSchemeMode, setPaintSchemeMode] = useState<"create" | "apply" | null>(null);
+  const [newPaintScheme, setNewPaintScheme] = useState({
+    name: "",
+    primaryColor: "#FF0000",
+    secondaryColor: "#FFFFFF",
+    accentColor: "#000000",
+    stripePattern: "solid" as "solid" | "striped" | "checkered" | "custom",
+  });
+  const [applyPaintTarget, setApplyPaintTarget] = useState<"single" | "all" | "new">("single");
+  const [selectedPaintScheme, setSelectedPaintScheme] = useState<string | null>(null);
 
   if (!playerData || !user) return null;
 
   const locomotives = playerData.locomotives;
+
+  // Check for completed paint jobs and update status
+  useEffect(() => {
+    const checkPaintJobs = async () => {
+      const now = Date.now();
+      const completedPaintJobs = locomotives.filter(
+        l => l.status === "in_paint_shop" && l.paintCompleteAt && l.paintCompleteAt <= now
+      );
+
+      if (completedPaintJobs.length > 0) {
+        try {
+          // Refresh data first to avoid overwriting concurrent changes
+          await refreshPlayerData();
+          
+          const db = getDbOrThrow();
+          const playerRef = doc(db, "players", user.uid);
+          
+          // Get the latest data after refresh
+          const freshPlayerData = await refreshPlayerData();
+          if (!freshPlayerData?.locomotives) return;
+          
+          const updatedLocos = freshPlayerData.locomotives.map(l => {
+            if (l.status === "in_paint_shop" && l.paintCompleteAt && l.paintCompleteAt <= now) {
+              const { paintCompleteAt, ...locoWithoutPaintTime } = l;
+              return { ...locoWithoutPaintTime, status: "available" as const };
+            }
+            return l;
+          });
+
+          await updateDoc(playerRef, { locomotives: updatedLocos });
+          await refreshPlayerData();
+          
+          toast({
+            title: "Paint Jobs Complete",
+            description: `${completedPaintJobs.length} locomotive(s) ready`,
+          });
+        } catch (error) {
+          console.error("Error completing paint jobs:", error);
+        }
+      }
+    };
+
+    checkPaintJobs();
+    
+    // Check every 30 seconds for paint job completions
+    const interval = setInterval(checkPaintJobs, 30000);
+    return () => clearInterval(interval);
+  }, [locomotives, user.uid, refreshPlayerData, toast]);
 
   const filteredLocos = useMemo(() => {
     return locomotives.filter((loco) => {
@@ -172,6 +231,110 @@ export default function Inventory() {
     }
   };
 
+  const handleCreatePaintScheme = async () => {
+    if (!newPaintScheme.name.trim()) {
+      toast({ title: "Invalid Name", description: "Please enter a paint scheme name", variant: "destructive" });
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const db = getDbOrThrow();
+      const playerRef = doc(db, "players", user.uid);
+      const newScheme = {
+        id: crypto.randomUUID(),
+        ...newPaintScheme,
+        createdAt: Date.now(),
+      };
+
+      await updateDoc(playerRef, {
+        paintSchemes: [...(playerData.paintSchemes || []), newScheme],
+      });
+
+      await refreshPlayerData();
+      setPaintSchemeMode(null);
+      setNewPaintScheme({ name: "", primaryColor: "#FF0000", secondaryColor: "#FFFFFF", accentColor: "#000000", stripePattern: "solid" });
+      toast({ title: "Paint Scheme Created", description: `Created "${newScheme.name}"` });
+    } catch (error) {
+      console.error(error);
+      toast({ title: "Error", description: "Failed to create paint scheme", variant: "destructive" });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleApplyPaintScheme = async () => {
+    if (!selectedPaintScheme) return;
+
+    const scheme = playerData.paintSchemes?.find(s => s.id === selectedPaintScheme);
+    if (!scheme) return;
+
+    let cost = 0;
+    let updatedLocos = [...locomotives];
+    const now = Date.now();
+    const PAINT_DOWNTIME = 10 * 60 * 1000; // 10 minutes
+    const paintCompleteAt = now + PAINT_DOWNTIME;
+
+    if (applyPaintTarget === "single" && selectedLoco) {
+      if (playerData.stats.cash < 5000) {
+        toast({ title: "Insufficient Funds", description: "Painting one locomotive costs $5,000", variant: "destructive" });
+        return;
+      }
+      cost = 5000;
+      updatedLocos = locomotives.map(l => 
+        l.id === selectedLoco.id 
+          ? { ...l, paintSchemeId: selectedPaintScheme, status: "in_paint_shop" as const, paintCompleteAt } 
+          : l
+      );
+    } else if (applyPaintTarget === "all") {
+      const availableLocos = locomotives.filter(l => l.status === "available");
+      cost = availableLocos.length * 3500;
+      if (playerData.stats.cash < cost) {
+        toast({ title: "Insufficient Funds", description: `Painting all locomotives costs $${cost.toLocaleString()}`, variant: "destructive" });
+        return;
+      }
+      updatedLocos = locomotives.map(l => 
+        l.status === "available" 
+          ? { ...l, paintSchemeId: selectedPaintScheme, status: "in_paint_shop" as const, paintCompleteAt } 
+          : l
+      );
+    }
+
+    setLoading(true);
+    try {
+      const db = getDbOrThrow();
+      const playerRef = doc(db, "players", user.uid);
+      
+      const updates: any = {
+        locomotives: updatedLocos,
+        "stats.cash": playerData.stats.cash - cost,
+      };
+
+      // If applying to new locomotives, set a default paint scheme
+      if (applyPaintTarget === "new") {
+        updates["company.defaultPaintScheme"] = selectedPaintScheme;
+      }
+
+      await updateDoc(playerRef, updates);
+      await refreshPlayerData();
+      setPaintSchemeMode(null);
+      setSelectedLoco(null);
+      
+      const message = applyPaintTarget === "new" 
+        ? "All future locomotives will use this paint scheme" 
+        : applyPaintTarget === "all"
+        ? `Painting ${locomotives.filter(l => l.status === "available").length} locomotives - they'll be ready in 10 minutes`
+        : "Painting in progress - ready in 10 minutes";
+      
+      toast({ title: "Paint Scheme Applied", description: message });
+    } catch (error) {
+      console.error(error);
+      toast({ title: "Error", description: "Failed to apply paint scheme", variant: "destructive" });
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const getConditionBadgeVariant = (status: string) => {
     if (status === "excellent" || status === "good") return "default";
     if (status === "fair") return "secondary";
@@ -186,11 +349,17 @@ export default function Inventory() {
 
   return (
     <div className="max-w-7xl mx-auto p-6 space-y-6">
-      <div>
-        <h1 className="text-3xl font-accent font-bold" data-testid="text-inventory-title">Locomotive Inventory</h1>
-        <p className="text-muted-foreground">
-          Manage your fleet of {locomotives.length} locomotive{locomotives.length !== 1 ? "s" : ""}
-        </p>
+      <div className="flex items-start justify-between">
+        <div>
+          <h1 className="text-3xl font-accent font-bold" data-testid="text-inventory-title">Locomotive Inventory</h1>
+          <p className="text-muted-foreground">
+            Manage your fleet of {locomotives.length} locomotive{locomotives.length !== 1 ? "s" : ""}
+          </p>
+        </div>
+        <Button onClick={() => setShowPaintSchemes(true)} data-testid="button-paint-schemes">
+          <Paintbrush className="w-4 h-4 mr-2" />
+          Paint Schemes ({playerData.paintSchemes?.length || 0})
+        </Button>
       </div>
 
       {/* Search and Filter */}
@@ -453,7 +622,7 @@ export default function Inventory() {
                   </div>
                 )}
 
-                <div className="flex gap-2">
+                <div className="flex gap-2 flex-wrap">
                   <Button
                     onClick={() => {
                       setCustomizeMode(true);
@@ -465,6 +634,19 @@ export default function Inventory() {
                   >
                     <Settings2 className="w-4 h-4 mr-2" />
                     Customize
+                  </Button>
+                  <Button
+                    onClick={() => {
+                      setPaintSchemeMode("apply");
+                      setApplyPaintTarget("single");
+                    }}
+                    variant="outline"
+                    disabled={loading || selectedLoco.status !== "available"}
+                    className="flex-1"
+                    data-testid="button-paint"
+                  >
+                    <Paintbrush className="w-4 h-4 mr-2" />
+                    Paint
                   </Button>
                   <Button
                     onClick={() => handleSell(selectedLoco)}
@@ -532,6 +714,190 @@ export default function Inventory() {
                 data-testid="button-confirm-rename"
               >
                 Confirm ($10,000)
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Paint Schemes Management Dialog */}
+      <Dialog open={showPaintSchemes} onOpenChange={(open) => !open && setShowPaintSchemes(false)}>
+        <DialogContent className="max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>Paint Schemes</DialogTitle>
+            <DialogDescription>
+              Create and manage custom paint schemes for your locomotives
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <Button onClick={() => setPaintSchemeMode("create")} className="w-full" data-testid="button-create-scheme">
+              <Paintbrush className="w-4 h-4 mr-2" />
+              Create New Paint Scheme
+            </Button>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-h-96 overflow-y-auto">
+              {(playerData.paintSchemes || []).map((scheme) => (
+                <Card key={scheme.id} className="hover-elevate cursor-pointer" onClick={() => {
+                  setSelectedPaintScheme(scheme.id);
+                  setPaintSchemeMode("apply");
+                  setApplyPaintTarget("all");
+                }} data-testid={`card-scheme-${scheme.id}`}>
+                  <CardHeader>
+                    <CardTitle className="text-base">{scheme.name}</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="flex gap-2">
+                      <div className="w-12 h-12 rounded border" style={{ backgroundColor: scheme.primaryColor }} title="Primary" />
+                      <div className="w-12 h-12 rounded border" style={{ backgroundColor: scheme.secondaryColor }} title="Secondary" />
+                      {scheme.accentColor && (
+                        <div className="w-12 h-12 rounded border" style={{ backgroundColor: scheme.accentColor }} title="Accent" />
+                      )}
+                    </div>
+                    <div className="mt-2 text-sm text-muted-foreground capitalize">{scheme.stripePattern}</div>
+                  </CardContent>
+                </Card>
+              ))}
+              {(playerData.paintSchemes || []).length === 0 && (
+                <div className="col-span-2 text-center py-8 text-muted-foreground">
+                  No paint schemes yet. Create one to get started!
+                </div>
+              )}
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Create Paint Scheme Dialog */}
+      <Dialog open={paintSchemeMode === "create"} onOpenChange={(open) => !open && setPaintSchemeMode(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Create Paint Scheme</DialogTitle>
+            <DialogDescription>
+              Design a custom paint scheme for your locomotives
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="scheme-name">Scheme Name</Label>
+              <Input
+                id="scheme-name"
+                value={newPaintScheme.name}
+                onChange={(e) => setNewPaintScheme({ ...newPaintScheme, name: e.target.value })}
+                placeholder="e.g. Classic Red & White"
+                data-testid="input-scheme-name"
+              />
+            </div>
+
+            <div className="grid grid-cols-3 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="primary-color">Primary Color</Label>
+                <Input
+                  id="primary-color"
+                  type="color"
+                  value={newPaintScheme.primaryColor}
+                  onChange={(e) => setNewPaintScheme({ ...newPaintScheme, primaryColor: e.target.value })}
+                  data-testid="input-primary-color"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="secondary-color">Secondary Color</Label>
+                <Input
+                  id="secondary-color"
+                  type="color"
+                  value={newPaintScheme.secondaryColor}
+                  onChange={(e) => setNewPaintScheme({ ...newPaintScheme, secondaryColor: e.target.value })}
+                  data-testid="input-secondary-color"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="accent-color">Accent Color</Label>
+                <Input
+                  id="accent-color"
+                  type="color"
+                  value={newPaintScheme.accentColor}
+                  onChange={(e) => setNewPaintScheme({ ...newPaintScheme, accentColor: e.target.value })}
+                  data-testid="input-accent-color"
+                />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Stripe Pattern</Label>
+              <Select value={newPaintScheme.stripePattern} onValueChange={(v: any) => setNewPaintScheme({ ...newPaintScheme, stripePattern: v })}>
+                <SelectTrigger data-testid="select-stripe-pattern">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="solid">Solid</SelectItem>
+                  <SelectItem value="striped">Striped</SelectItem>
+                  <SelectItem value="checkered">Checkered</SelectItem>
+                  <SelectItem value="custom">Custom</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={() => setPaintSchemeMode(null)} className="flex-1">
+                Cancel
+              </Button>
+              <Button onClick={handleCreatePaintScheme} disabled={loading || !newPaintScheme.name.trim()} className="flex-1" data-testid="button-confirm-create">
+                Create Scheme
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Apply Paint Scheme Dialog */}
+      <Dialog open={paintSchemeMode === "apply"} onOpenChange={(open) => !open && setPaintSchemeMode(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Apply Paint Scheme</DialogTitle>
+            <DialogDescription>
+              Choose a paint scheme and select where to apply it
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>Select Paint Scheme</Label>
+              <Select value={selectedPaintScheme || ""} onValueChange={setSelectedPaintScheme}>
+                <SelectTrigger data-testid="select-paint-scheme">
+                  <SelectValue placeholder="Choose a paint scheme" />
+                </SelectTrigger>
+                <SelectContent>
+                  {(playerData.paintSchemes || []).map((scheme) => (
+                    <SelectItem key={scheme.id} value={scheme.id}>{scheme.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Apply To</Label>
+              <Select value={applyPaintTarget} onValueChange={(v: any) => setApplyPaintTarget(v)}>
+                <SelectTrigger data-testid="select-paint-target">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {selectedLoco && <SelectItem value="single">This Locomotive Only ($5,000)</SelectItem>}
+                  <SelectItem value="all">All Available Locomotives (${(locomotives.filter(l => l.status === "available").length * 3500).toLocaleString()})</SelectItem>
+                  <SelectItem value="new">Future Locomotives (Free - sets default)</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                Locomotives will be out of service for 10 minutes during painting
+              </p>
+            </div>
+
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={() => setPaintSchemeMode(null)} className="flex-1">
+                Cancel
+              </Button>
+              <Button onClick={handleApplyPaintScheme} disabled={loading || !selectedPaintScheme} className="flex-1" data-testid="button-confirm-apply">
+                Apply Paint
               </Button>
             </div>
           </div>

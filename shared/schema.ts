@@ -55,6 +55,7 @@ export const locomotiveSchema = z.object({
   paintSchemeId: z.string().optional(), // Reference to paint scheme
   status: z.enum(["available", "assigned", "needs_repair", "in_paint_shop", "stored"]).default("available"),
   assignedJobId: z.string().optional(),
+  paintCompleteAt: z.number().optional(), // Timestamp when paint job will be complete
   purchasedAt: z.number(),
   notes: z.string().optional(),
 });

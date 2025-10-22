@@ -12,7 +12,7 @@ import { MapPin, Package, Zap, DollarSign, Clock, Star, Lock, ArrowRight, Trendi
 import { Progress } from "@/components/ui/progress";
 import type { Job, CarManifest } from "@shared/schema";
 import { FREIGHT_TYPES } from "@shared/schema";
-import { doc, updateDoc } from "firebase/firestore";
+import { doc, updateDoc, deleteField } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { calculateLevel, getXpForNextLevel } from "@shared/schema";
 import { LevelUpNotification } from "@/components/level-up-notification";
@@ -513,9 +513,13 @@ export default function Jobs() {
       // Remove the completed job and free up locomotives
       const updatedJobs = playerData.jobs.filter((j) => j.id !== jobId);
 
-      const updatedLocos = locomotives.map((l) =>
-        l.assignedJobId === jobId ? { ...l, status: "available" as const, assignedJobId: undefined } : l
-      );
+      const updatedLocos = locomotives.map((l) => {
+        if (l.assignedJobId === jobId) {
+          const { assignedJobId, ...locoWithoutJobId } = l;
+          return { ...locoWithoutJobId, status: "available" as const };
+        }
+        return l;
+      });
 
       await updateDoc(playerRef, {
         jobs: updatedJobs,
@@ -554,6 +558,34 @@ export default function Jobs() {
   const tier2Jobs = availableJobs.filter((j) => j.tier === 2);
   const tier3Jobs = availableJobs.filter((j) => j.tier === 3);
 
+  // Calculate next job refresh time
+  const getNextRefreshTime = () => {
+    const now = new Date();
+    const minutes = now.getMinutes();
+    const nextRefreshMinute = minutes < 30 ? 30 : 60;
+    const nextRefresh = new Date(now);
+    nextRefresh.setMinutes(nextRefreshMinute, 0, 0);
+    if (nextRefreshMinute === 60) {
+      nextRefresh.setHours(nextRefresh.getHours() + 1);
+      nextRefresh.setMinutes(0);
+    }
+    return nextRefresh;
+  };
+
+  const nextRefreshTime = getNextRefreshTime();
+  const timeUntilRefresh = Math.max(0, nextRefreshTime.getTime() - currentTime);
+  const minutesUntilRefresh = Math.floor(timeUntilRefresh / 60000);
+  const secondsUntilRefresh = Math.floor((timeUntilRefresh % 60000) / 1000);
+
+  // Sort locomotives: selected ones first, then by horsepower
+  const sortedAvailableLocos = [...availableLocos].sort((a, b) => {
+    const aSelected = selectedLocos.includes(a.id);
+    const bSelected = selectedLocos.includes(b.id);
+    if (aSelected && !bSelected) return -1;
+    if (!aSelected && bSelected) return 1;
+    return b.horsepower - a.horsepower; // Sort by HP descending within each group
+  });
+
   const getDemandIcon = (level: string) => {
     if (level === "high" || level === "critical") return <TrendingUp className="w-3 h-3" />;
     if (level === "low") return <TrendingDown className="w-3 h-3" />;
@@ -575,6 +607,10 @@ export default function Jobs() {
     const minutesRemaining = Math.ceil(timeRemaining / 60000);
     const isCompleted = timeRemaining === 0;
 
+    // Get assigned locomotives for this job
+    const assignedLocos = locomotives.filter(l => job.assignedLocos?.includes(l.id));
+    const locoNumbers = assignedLocos.map(l => l.unitNumber).join(", ");
+
     return (
       <Card className="hover-elevate">
         <CardHeader>
@@ -595,6 +631,14 @@ export default function Jobs() {
             <ArrowRight className="w-4 h-4 text-muted-foreground" />
             <span className="font-medium">{job.destination}</span>
           </div>
+
+          {locoNumbers && (
+            <div className="flex items-center gap-2 text-sm p-2 bg-muted/50 rounded">
+              <Zap className="w-3 h-3 text-muted-foreground" />
+              <span className="text-muted-foreground">Locomotives:</span>
+              <span className="font-mono font-medium">{locoNumbers}</span>
+            </div>
+          )}
 
           <div>
             <div className="flex items-center justify-between text-sm mb-2">
@@ -716,11 +760,22 @@ export default function Jobs() {
   return (
     <>
       <div className="max-w-7xl mx-auto p-6 space-y-6">
-        <div>
-          <h1 className="text-3xl font-accent font-bold">Job Board</h1>
-          <p className="text-muted-foreground">
-            Available freight jobs from {company.city}
-          </p>
+        <div className="flex items-start justify-between">
+          <div>
+            <h1 className="text-3xl font-accent font-bold">Job Board</h1>
+            <p className="text-muted-foreground">
+              Available freight jobs from {company.city}
+            </p>
+          </div>
+          <div className="flex items-center gap-2 px-4 py-2 bg-muted rounded-md">
+            <RefreshCw className="w-4 h-4 text-muted-foreground" />
+            <div className="text-sm">
+              <div className="text-muted-foreground">Next refresh in</div>
+              <div className="font-mono font-semibold">
+                {minutesUntilRefresh}:{secondsUntilRefresh.toString().padStart(2, '0')}
+              </div>
+            </div>
+          </div>
         </div>
 
         <Tabs defaultValue="current">
@@ -731,10 +786,10 @@ export default function Jobs() {
             <TabsTrigger value="tier1" data-testid="tab-tier1">
               Local Freight
             </TabsTrigger>
-            <TabsTrigger value="tier2" data-testid="tab-tier2">
+            <TabsTrigger value="tier2" data-testid="tab-tier2" disabled={stats.level < 10}>
               Mainline Freight {stats.level < 10 && <Lock className="w-3 h-3 ml-1" />}
             </TabsTrigger>
-            <TabsTrigger value="tier3" data-testid="tab-tier3">
+            <TabsTrigger value="tier3" data-testid="tab-tier3" disabled={stats.level < 50}>
               Special Freight {stats.level < 50 && <Lock className="w-3 h-3 ml-1" />}
             </TabsTrigger>
           </TabsList>
@@ -866,10 +921,12 @@ export default function Jobs() {
                         No locomotives available
                       </p>
                     ) : (
-                      availableLocos.map((loco) => (
+                      sortedAvailableLocos.map((loco) => (
                         <div
                           key={loco.id}
-                          className="flex items-center gap-3 p-3 border rounded-md hover-elevate"
+                          className={`flex items-center gap-3 p-3 border rounded-md hover-elevate ${
+                            selectedLocos.includes(loco.id) ? "bg-primary/10 border-primary" : ""
+                          }`}
                         >
                           <Checkbox
                             checked={selectedLocos.includes(loco.id)}
