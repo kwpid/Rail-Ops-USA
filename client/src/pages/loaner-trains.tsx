@@ -11,8 +11,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useToast } from "@/hooks/use-toast";
 import { type LoanerTrain, PAINT_COSTS } from "@shared/schema";
 import { Zap, TrendingUp, Gauge, Weight, DollarSign, Search, Filter, Paintbrush, AlertTriangle, Tag, Wrench } from "lucide-react";
-import { doc, updateDoc } from "firebase/firestore";
-import { getDbOrThrow } from "@/lib/firebase";
+import { doc } from "firebase/firestore";
+import { getDbOrThrow, safeUpdateDoc } from "@/lib/firebase";
 
 export default function LoanerTrains() {
   const { playerData, user, refreshPlayerData } = useAuth();
@@ -148,7 +148,7 @@ export default function LoanerTrains() {
         return;
       }
       
-      await updateDoc(playerRef, {
+      await safeUpdateDoc(playerRef, {
         locomotives: [...playerData.locomotives, newLoco],
         loanerTrains: updatedLoanerTrains,
         "stats.cash": stats.cash - totalCost,

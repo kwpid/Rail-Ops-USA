@@ -5,8 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Sparkles, DollarSign, Coins, Lock, Check, Info } from "lucide-react";
-import { doc, updateDoc } from "firebase/firestore";
-import { getDbOrThrow } from "@/lib/firebase";
+import { doc } from "firebase/firestore";
+import { getDbOrThrow, safeUpdateDoc } from "@/lib/firebase";
 import { useToast } from "@/hooks/use-toast";
 import type { HeritagePaintScheme } from "@shared/schema";
 
@@ -65,7 +65,7 @@ export default function HeritageSchemesPage() {
         s.id === scheme.id ? { ...s, isPurchased: true } : s
       );
 
-      await updateDoc(playerDocRef, {
+      await safeUpdateDoc(playerDocRef, {
         heritagePaintSchemes: updatedSchemes,
         "stats.cash": playerData.stats.cash - scheme.purchaseCost,
         "stats.points": points - scheme.pointsCost,
@@ -107,7 +107,7 @@ export default function HeritageSchemesPage() {
         heritagePaintSchemeId: loco.id === locoId ? scheme.id : loco.heritagePaintSchemeId === scheme.id ? undefined : loco.heritagePaintSchemeId,
       }));
 
-      await updateDoc(playerDocRef, {
+      await safeUpdateDoc(playerDocRef, {
         heritagePaintSchemes: updatedSchemes,
         locomotives: updatedLocomotives,
       });

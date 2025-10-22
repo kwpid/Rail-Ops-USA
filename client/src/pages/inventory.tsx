@@ -13,8 +13,8 @@ import { useToast } from "@/hooks/use-toast";
 import { Train, Gauge, Fuel, Zap, Weight, TrendingUp, Settings2, DollarSign, Search, Filter, Tag, Activity, Paintbrush } from "lucide-react";
 import type { Locomotive } from "@shared/schema";
 import { getLocomotiveConditionStatus } from "@shared/schema";
-import { doc, updateDoc } from "firebase/firestore";
-import { getDbOrThrow } from "@/lib/firebase";
+import { doc } from "firebase/firestore";
+import { getDbOrThrow, safeUpdateDoc } from "@/lib/firebase";
 
 export default function Inventory() {
   const { playerData, user, refreshPlayerData } = useAuth();
@@ -72,7 +72,7 @@ export default function Inventory() {
             return l;
           });
 
-          await updateDoc(playerRef, { locomotives: updatedLocos });
+          await safeUpdateDoc(playerRef, { locomotives: updatedLocos });
           await refreshPlayerData();
           
           toast({
@@ -125,7 +125,7 @@ export default function Inventory() {
       const updatedLocos = locomotives.filter((l) => l.id !== loco.id);
       const newCash = playerData.stats.cash + loco.resaleValue;
 
-      await updateDoc(playerRef, {
+      await safeUpdateDoc(playerRef, {
         locomotives: updatedLocos,
         "stats.cash": newCash,
       });
@@ -158,7 +158,7 @@ export default function Inventory() {
       const updatedLocos = locomotives.filter((l) => l.id !== loco.id);
       const newCash = playerData.stats.cash + loco.scrapValue;
 
-      await updateDoc(playerRef, {
+      await safeUpdateDoc(playerRef, {
         locomotives: updatedLocos,
         "stats.cash": newCash,
       });
@@ -217,7 +217,7 @@ export default function Inventory() {
         l.id === selectedLoco.id ? { ...l, unitNumber: newUnitNumber } : l
       );
 
-      await updateDoc(playerRef, {
+      await safeUpdateDoc(playerRef, {
         locomotives: updatedLocos,
         "stats.cash": playerData.stats.cash - 10000,
       });
@@ -257,7 +257,7 @@ export default function Inventory() {
         createdAt: Date.now(),
       };
 
-      await updateDoc(playerRef, {
+      await safeUpdateDoc(playerRef, {
         paintSchemes: [...(playerData.paintSchemes || []), newScheme],
       });
 
@@ -325,7 +325,7 @@ export default function Inventory() {
         updates["company.defaultPaintScheme"] = selectedPaintScheme;
       }
 
-      await updateDoc(playerRef, updates);
+      await safeUpdateDoc(playerRef, updates);
       await refreshPlayerData();
       setPaintSchemeMode(null);
       setSelectedLoco(null);
@@ -369,7 +369,7 @@ export default function Inventory() {
           : l
       );
 
-      await updateDoc(playerRef, {
+      await safeUpdateDoc(playerRef, {
         locomotives: updatedLocos,
         "stats.cash": playerData.stats.cash - PATCH_COST,
       });

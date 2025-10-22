@@ -1,7 +1,7 @@
 // Firebase configuration based on firebase_barebones_javascript blueprint
 import { initializeApp, FirebaseApp } from "firebase/app";
 import { getAuth, GoogleAuthProvider, Auth } from "firebase/auth";
-import { getFirestore, Firestore } from "firebase/firestore";
+import { getFirestore, Firestore, setDoc, DocumentReference, UpdateData, WithFieldValue } from "firebase/firestore";
 
 // Check if all required Firebase secrets are present
 const hasRequiredSecrets = !!(
@@ -56,6 +56,19 @@ export function getGoogleProviderOrThrow() {
     throw new Error("Firebase Google Provider is not configured. Please set up Firebase environment variables.");
   }
   return googleProvider;
+}
+
+/**
+ * Safely updates a document in Firestore. If the document doesn't exist, it will be created.
+ * This is a safer alternative to updateDoc which fails if the document doesn't exist.
+ * @param reference - The document reference to update
+ * @param data - The data to update or create
+ */
+export async function safeUpdateDoc(
+  reference: DocumentReference,
+  data: any
+): Promise<void> {
+  await setDoc(reference, data, { merge: true });
 }
 
 export { app, auth, db, googleProvider };

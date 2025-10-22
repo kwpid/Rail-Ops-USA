@@ -12,8 +12,8 @@ import { MapPin, Package, Zap, DollarSign, Clock, Star, Lock, ArrowRight, Trendi
 import { Progress } from "@/components/ui/progress";
 import type { Job, CarManifest } from "@shared/schema";
 import { FREIGHT_TYPES, generateLoanerTrainMarket } from "@shared/schema";
-import { doc, updateDoc, deleteField } from "firebase/firestore";
-import { db } from "@/lib/firebase";
+import { doc, deleteField } from "firebase/firestore";
+import { getDbOrThrow, safeUpdateDoc } from "@/lib/firebase";
 import { calculateLevel, getXpForNextLevel } from "@shared/schema";
 import { LevelUpNotification } from "@/components/level-up-notification";
 
@@ -315,8 +315,9 @@ export default function Jobs() {
       // Only update if we have changes
       if (Object.keys(updates).length > 0) {
         try {
+          const db = getDbOrThrow();
           const playerRef = doc(db, "players", user.uid);
-          await updateDoc(playerRef, updates);
+          await safeUpdateDoc(playerRef, updates);
         } catch (error) {
           console.error("Error initializing market:", error);
         }
@@ -361,8 +362,9 @@ export default function Jobs() {
       const nextRefreshTimestamp = now.getTime() + (30 * 60 * 1000); // 30 minutes from now
       
       try {
+        const db = getDbOrThrow();
         const playerRef = doc(db, "players", user.uid);
-        await updateDoc(playerRef, {
+        await safeUpdateDoc(playerRef, {
           jobs: [...ongoingJobs, ...tier1, ...tier2, ...tier3],
           loanerTrains: newLoanerTrains,
           loanerTrainsRefreshAt: nextRefreshTimestamp,
@@ -479,6 +481,7 @@ export default function Jobs() {
 
     setLoading(true);
     try {
+      const db = getDbOrThrow();
       const playerRef = doc(db, "players", user.uid);
       const now = Date.now();
       const completionTime = now + (selectedJob.timeMinutes || 60) * 60 * 1000;
@@ -493,7 +496,7 @@ export default function Jobs() {
         selectedLocos.includes(l.id) ? { ...l, status: "assigned" as const, assignedJobId: selectedJob.id } : l
       );
 
-      await updateDoc(playerRef, {
+      await safeUpdateDoc(playerRef, {
         jobs: updatedJobs,
         locomotives: updatedLocos,
       });
@@ -520,6 +523,7 @@ export default function Jobs() {
 
   const handleClaimJob = async (jobId: string) => {
     try {
+      const db = getDbOrThrow();
       const playerRef = doc(db, "players", user.uid);
       const job = playerData.jobs.find((j) => j.id === jobId);
       if (!job || job.status !== "in_progress") return;
@@ -540,7 +544,7 @@ export default function Jobs() {
         return l;
       });
 
-      await updateDoc(playerRef, {
+      await safeUpdateDoc(playerRef, {
         jobs: updatedJobs,
         locomotives: updatedLocos,
         "stats.cash": newCash,

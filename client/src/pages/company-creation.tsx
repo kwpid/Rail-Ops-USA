@@ -6,8 +6,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { LOCOMOTIVE_CATALOG, US_CITIES } from "@shared/schema";
-import { doc, updateDoc } from "firebase/firestore";
-import { db } from "@/lib/firebase";
+import { doc } from "firebase/firestore";
+import { getDbOrThrow, safeUpdateDoc } from "@/lib/firebase";
 import { Loader2, Building2, MapPin, Palette } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
@@ -38,8 +38,9 @@ export default function CompanyCreation() {
       const preset = PRESET_COLORS[selectedColorPreset];
       const starterLoco = LOCOMOTIVE_CATALOG[0]; // EMD GP38-2
 
+      const db = getDbOrThrow();
       const playerRef = doc(db, "players", user.uid);
-      await updateDoc(playerRef, {
+      await safeUpdateDoc(playerRef, {
         company: {
           name: companyName,
           city,

@@ -6,8 +6,8 @@ import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Trophy, Calendar, Target, Gift, Coins, DollarSign, CheckCircle2, Lock } from "lucide-react";
-import { doc, updateDoc } from "firebase/firestore";
-import { getDbOrThrow } from "@/lib/firebase";
+import { doc } from "firebase/firestore";
+import { getDbOrThrow, safeUpdateDoc } from "@/lib/firebase";
 import { useToast } from "@/hooks/use-toast";
 import type { Achievement } from "@shared/schema";
 
@@ -42,7 +42,7 @@ export default function AchievementsPage() {
           : a
       );
 
-      await updateDoc(playerDocRef, {
+      await safeUpdateDoc(playerDocRef, {
         achievements: updatedAchievements,
         "stats.points": playerData.stats.points + achievement.rewards.points,
         "stats.cash": playerData.stats.cash + achievement.rewards.cash,

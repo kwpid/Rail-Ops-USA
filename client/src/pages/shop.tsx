@@ -12,8 +12,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { LOCOMOTIVE_CATALOG, type LocomotiveCatalogItem, generateUsedLocomotive, type UsedLocomotiveItem } from "@shared/schema";
 import { Zap, TrendingUp, Gauge, Weight, DollarSign, Search, Filter, Fuel, Tag, Activity } from "lucide-react";
-import { doc, updateDoc } from "firebase/firestore";
-import { getDbOrThrow } from "@/lib/firebase";
+import { doc } from "firebase/firestore";
+import { getDbOrThrow, safeUpdateDoc } from "@/lib/firebase";
 
 export default function Shop() {
   const { playerData, user, refreshPlayerData } = useAuth();
@@ -129,7 +129,7 @@ export default function Shop() {
         nextId++;
       }
 
-      await updateDoc(playerRef, {
+      await safeUpdateDoc(playerRef, {
         locomotives: [...playerData.locomotives, ...newLocos],
         "stats.cash": stats.cash - totalCost,
         "stats.nextLocoId": nextId,
@@ -199,7 +199,7 @@ export default function Shop() {
         notes: usedItem.notes,
       };
 
-      await updateDoc(playerRef, {
+      await safeUpdateDoc(playerRef, {
         locomotives: [...playerData.locomotives, newLoco],
         "stats.cash": stats.cash - usedItem.usedPrice,
         "stats.nextLocoId": nextId + 1,
