@@ -29,6 +29,45 @@ export function useAuth() {
   return context;
 }
 
+// Normalize PlayerData to ensure all fields exist with proper defaults
+function normalizePlayerData(data: Partial<PlayerData>, userId: string): PlayerData {
+  const now = Date.now();
+  
+  return {
+    player: data.player || {
+      id: userId,
+      email: "",
+      displayName: "Player",
+      createdAt: now,
+    },
+    company: data.company,
+    stats: {
+      cash: data.stats?.cash ?? 500000,
+      xp: data.stats?.xp ?? 0,
+      level: data.stats?.level ?? 1,
+      nextLocoId: data.stats?.nextLocoId ?? 2,
+      points: data.stats?.points ?? 10,
+      totalJobsCompleted: data.stats?.totalJobsCompleted ?? 0,
+    },
+    locomotives: data.locomotives || [],
+    jobs: data.jobs || [],
+    paintSchemes: data.paintSchemes || [],
+    heritagePaintSchemes: data.heritagePaintSchemes || HERITAGE_PAINT_SCHEMES_CATALOG.map(scheme => ({
+      ...scheme,
+      createdAt: now,
+      isPurchased: false,
+    })),
+    achievements: data.achievements || [
+      ...generateWeeklyAchievements(),
+      ...generateCareerAchievements(),
+      ...generateEventAchievements(),
+    ],
+    weeklyAchievementsRefreshAt: data.weeklyAchievementsRefreshAt ?? getNextFriday(),
+    loanerTrains: data.loanerTrains || [],
+    loanerTrainsRefreshAt: data.loanerTrainsRefreshAt,
+  };
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<FirebaseUser | null>(null);
   const [playerData, setPlayerData] = useState<PlayerData | null>(null);
@@ -42,9 +81,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const docRef = doc(db, "players", user.uid);
       const docSnap = await getDoc(docRef);
       if (docSnap.exists()) {
-        const data = docSnap.data() as PlayerData;
-        setPlayerData(data);
-        return data;
+        const rawData = docSnap.data();
+        const normalizedData = normalizePlayerData(rawData, user.uid);
+        setPlayerData(normalizedData);
+        return normalizedData;
       }
     }
     return null;
@@ -77,7 +117,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const docRef = doc(db, "players", user.uid);
     const unsubscribe = onSnapshot(docRef, (docSnap) => {
       if (docSnap.exists()) {
-        setPlayerData(docSnap.data() as PlayerData);
+        const rawData = docSnap.data();
+        const normalizedData = normalizePlayerData(rawData, user.uid);
+        setPlayerData(normalizedData);
       } else {
         setPlayerData(null);
       }
