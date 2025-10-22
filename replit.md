@@ -66,12 +66,20 @@ A comprehensive railroad management game built with React, Firebase, and TypeScr
 
 **Job System:**
 - Three tiers:
-  - Tier 1 (Local Freight): Unlocked from start
+  - Tier 1 (Local Freight + Yard Switching): Unlocked from start
+    - Local freight: Jobs within the same city (e.g., "Chicago, IL Yard" → "Chicago, IL Industrial Park")
+    - Distance: 5-15 miles, Duration: 8-15 minutes
+    - Yard switching: In-yard operations (distance: 0 mi, Duration: 6-10 minutes)
   - Tier 2 (Mainline Freight): Unlocked at Level 10
+    - Distance: 80-200 miles, Duration: 45-90 minutes
   - Tier 3 (Special Freight): Unlocked at Level 50
+    - Distance: 200-500 miles, Duration: 120-300 minutes
 - Jobs require minimum HP (can assign multiple locomotives)
 - Completing jobs earns cash and XP
-- Auto-generated jobs based on company city
+- **Auto-refresh system**: Jobs refresh every 30 minutes (at XX:00 and XX:30)
+  - Only available jobs refresh; ongoing jobs (with assigned locomotives) are preserved
+- **Detailed manifests**: Each job includes breakdown of car types, contents, and weights
+- **Current Jobs tab**: Track ongoing jobs with real-time progress indicators
 
 **Leveling System:**
 - Gain XP by completing jobs
@@ -134,6 +142,13 @@ shared/
 ✅ Automatic locomotive numbering system
 ✅ Manual unit renaming ($10k cost)
 ✅ Three-tier job system with level gating
+  - Local freight (city-specific, 5-15 mi, 8-15 min)
+  - Yard switching (in-yard operations, 6-10 min)
+  - Mainline freight (80-200 mi, 45-90 min)
+  - Special freight (200-500 mi, 120-300 min)
+✅ Detailed job manifests (car types, contents, weights)
+✅ Current Jobs tab with real-time progress tracking
+✅ Auto-refresh jobs every 30 minutes (XX:00, XX:30)
 ✅ Multi-locomotive job assignments
 ✅ XP and leveling system
 ✅ Level-up notifications with unlock display
