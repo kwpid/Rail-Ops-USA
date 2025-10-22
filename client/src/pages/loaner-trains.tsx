@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { LOCOMOTIVE_CATALOG, generateUsedLocomotive, type UsedLocomotiveItem, PAINT_COSTS } from "@shared/schema";
+import { type LoanerTrain, PAINT_COSTS } from "@shared/schema";
 import { Zap, TrendingUp, Gauge, Weight, DollarSign, Search, Filter, Paintbrush, AlertTriangle, Tag, Wrench } from "lucide-react";
 import { doc, updateDoc } from "firebase/firestore";
 import { getDbOrThrow } from "@/lib/firebase";
@@ -17,7 +17,7 @@ import { getDbOrThrow } from "@/lib/firebase";
 export default function LoanerTrains() {
   const { playerData, user, refreshPlayerData } = useAuth();
   const { toast } = useToast();
-  const [selectedUsedLoco, setSelectedUsedLoco] = useState<UsedLocomotiveItem | null>(null);
+  const [selectedUsedLoco, setSelectedUsedLoco] = useState<LoanerTrain | null>(null);
   const [loading, setLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [filterTag, setFilterTag] = useState<"all" | "Local / Yard" | "Long Haul">("all");
@@ -30,31 +30,32 @@ export default function LoanerTrains() {
   const stats = playerData.stats;
   const company = playerData.company;
   const paintSchemes = playerData.paintSchemes || [];
+  const loanerTrains = playerData.loanerTrains || [];
 
   const usedLocomotives = useMemo(() => {
-    let used = LOCOMOTIVE_CATALOG.map(loco => generateUsedLocomotive(loco)).filter((loco) => {
+    let used = loanerTrains.filter((loco) => {
       const matchesSearch = 
-        loco.model.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        loco.manufacturer.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        loco.catalogItem.model.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        loco.catalogItem.manufacturer.toLowerCase().includes(searchQuery.toLowerCase()) ||
         loco.previousOwner.toLowerCase().includes(searchQuery.toLowerCase());
       
-      const matchesTag = filterTag === "all" || loco.tags.includes(filterTag);
+      const matchesTag = filterTag === "all" || loco.catalogItem.tags.includes(filterTag);
       
       return matchesSearch && matchesTag;
     });
 
     used.sort((a, b) => {
       if (sortBy === "price") return a.usedPrice - b.usedPrice;
-      if (sortBy === "hp") return b.horsepower - a.horsepower;
+      if (sortBy === "hp") return b.catalogItem.horsepower - a.catalogItem.horsepower;
       if (sortBy === "condition") return b.health - a.health;
-      return a.model.localeCompare(b.model);
+      return a.catalogItem.model.localeCompare(b.catalogItem.model);
     });
 
     return used;
-  }, [searchQuery, filterTag, sortBy]);
+  }, [loanerTrains, searchQuery, filterTag, sortBy]);
 
-  const handleUsedPurchase = async (usedItem: UsedLocomotiveItem) => {
-    let totalCost = usedItem.usedPrice;
+  const handleUsedPurchase = async (loanerTrain: LoanerTrain) => {
+    let totalCost = loanerTrain.usedPrice;
     
     // Calculate paint costs
     if (purchaseOption === "repaint") {
@@ -74,7 +75,7 @@ export default function LoanerTrains() {
     if (stats.cash < totalCost) {
       toast({
         title: "Insufficient Funds",
-        description: `You need $${totalCost.toLocaleString()} total (Locomotive: $${usedItem.usedPrice.toLocaleString()}${purchaseOption === "repaint" ? `, Repaint: $${PAINT_COSTS.SINGLE_LOCO.toLocaleString()}` : purchaseOption === "patch" ? `, Patch: $${PAINT_COSTS.PATCH_COST.toLocaleString()}` : ""})`,
+        description: `You need $${totalCost.toLocaleString()} total (Locomotive: $${loanerTrain.usedPrice.toLocaleString()}${purchaseOption === "repaint" ? `, Repaint: $${PAINT_COSTS.SINGLE_LOCO.toLocaleString()}` : purchaseOption === "patch" ? `, Patch: $${PAINT_COSTS.PATCH_COST.toLocaleString()}` : ""})`,
         variant: "destructive",
       });
       return;
@@ -88,31 +89,32 @@ export default function LoanerTrains() {
       const unitNumber = `#${nextId.toString().padStart(4, "0")}`;
       const now = Date.now();
 
+      const catalogItem = loanerTrain.catalogItem;
       const newLoco: any = {
         id: crypto.randomUUID(),
         unitNumber,
-        model: usedItem.model,
-        manufacturer: usedItem.manufacturer,
-        tier: usedItem.tier,
-        tags: usedItem.tags,
-        horsepower: usedItem.horsepower,
-        topSpeed: usedItem.topSpeed,
-        weight: usedItem.weight,
-        tractiveEffort: usedItem.tractiveEffort,
-        fuelCapacity: usedItem.fuelCapacity,
-        fuelEfficiency: usedItem.fuelEfficiency,
-        reliability: usedItem.reliability,
-        maintenanceCost: usedItem.maintenanceCost,
-        purchaseCost: usedItem.usedPrice,
-        resaleValue: Math.floor(usedItem.usedPrice * 0.7),
-        scrapValue: Math.floor(usedItem.usedPrice * 0.3),
-        mileage: usedItem.mileage,
-        health: usedItem.health,
-        paintCondition: purchaseOption === "as-is" ? 60 : 100,
-        previousOwnerName: usedItem.previousOwner,
+        model: catalogItem.model,
+        manufacturer: catalogItem.manufacturer,
+        tier: catalogItem.tier,
+        tags: catalogItem.tags,
+        horsepower: catalogItem.horsepower,
+        topSpeed: catalogItem.topSpeed,
+        weight: catalogItem.weight,
+        tractiveEffort: catalogItem.tractiveEffort,
+        fuelCapacity: catalogItem.fuelCapacity,
+        fuelEfficiency: catalogItem.fuelEfficiency,
+        reliability: catalogItem.reliability,
+        maintenanceCost: catalogItem.maintenanceCost,
+        purchaseCost: loanerTrain.usedPrice,
+        resaleValue: Math.floor(loanerTrain.usedPrice * 0.7),
+        scrapValue: Math.floor(loanerTrain.usedPrice * 0.3),
+        mileage: loanerTrain.mileage,
+        health: loanerTrain.health,
+        paintCondition: loanerTrain.paintCondition,
+        previousOwnerName: loanerTrain.previousOwner,
         isUsed: true,
         purchasedAt: now,
-        notes: usedItem.notes,
+        notes: catalogItem.notes,
       };
 
       // Handle paint options
@@ -121,6 +123,7 @@ export default function LoanerTrains() {
         newLoco.paintCompleteAt = now + (PAINT_COSTS.DOWNTIME_MINUTES * 60 * 1000);
         newLoco.paintSchemeId = selectedPaintScheme;
         newLoco.isPatched = false;
+        newLoco.paintCondition = 100;
         delete newLoco.previousOwnerName;
       } else if (purchaseOption === "patch") {
         newLoco.status = "in_paint_shop";
@@ -130,8 +133,24 @@ export default function LoanerTrains() {
         newLoco.status = "available";
       }
 
+      // Remove purchased loaner from the market (using stable id)
+      const updatedLoanerTrains = loanerTrains.filter(train => train.id !== loanerTrain.id);
+      
+      // Verify the train still exists in the market (prevent double-purchase)
+      if (updatedLoanerTrains.length === loanerTrains.length) {
+        toast({
+          title: "Train No Longer Available",
+          description: "This locomotive was already purchased or the market has refreshed.",
+          variant: "destructive",
+        });
+        setLoading(false);
+        setSelectedUsedLoco(null);
+        return;
+      }
+      
       await updateDoc(playerRef, {
         locomotives: [...playerData.locomotives, newLoco],
+        loanerTrains: updatedLoanerTrains,
         "stats.cash": stats.cash - totalCost,
         "stats.nextLocoId": nextId + 1,
       });
@@ -141,7 +160,7 @@ export default function LoanerTrains() {
       setPurchaseOption("as-is");
       setSelectedPaintScheme(null);
       
-      let description = `${usedItem.model} (${usedItem.mileage.toLocaleString()} mi, ${usedItem.health}% health) added to your fleet for $${totalCost.toLocaleString()}`;
+      let description = `${catalogItem.model} (${loanerTrain.mileage.toLocaleString()} mi, ${loanerTrain.health}% health) added to your fleet for $${totalCost.toLocaleString()}`;
       if (purchaseOption === "repaint") {
         description += ` - Will be repainted in ${PAINT_COSTS.DOWNTIME_MINUTES} minutes`;
       } else if (purchaseOption === "patch") {
@@ -248,20 +267,20 @@ export default function LoanerTrains() {
 
       {/* Used Locomotives Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {usedLocomotives.map((loco, idx) => (
+        {usedLocomotives.map((loco) => (
           <Card
-            key={idx}
+            key={loco.id}
             className="hover-elevate cursor-pointer"
             onClick={() => setSelectedUsedLoco(loco)}
-            data-testid={`card-used-loco-${idx}`}
+            data-testid={`card-used-loco-${loco.id}`}
           >
             <CardHeader>
               <div className="flex items-start justify-between gap-2">
                 <div>
-                  <CardTitle className="text-lg">{loco.model}</CardTitle>
-                  <CardDescription>{loco.manufacturer}</CardDescription>
+                  <CardTitle className="text-lg">{loco.catalogItem.model}</CardTitle>
+                  <CardDescription>{loco.catalogItem.manufacturer}</CardDescription>
                   <div className="flex gap-1 flex-wrap mt-2">
-                    {loco.tags.map((tag, i) => (
+                    {loco.catalogItem.tags.map((tag, i) => (
                       <Badge key={i} variant="outline" className="text-xs">
                         <Tag className="w-3 h-3 mr-1" />
                         {tag}
@@ -269,7 +288,7 @@ export default function LoanerTrains() {
                     ))}
                   </div>
                 </div>
-                {getConditionBadge(loco.health, loco.needsRepair)}
+                {getConditionBadge(loco.health, loco.health < 60)}
               </div>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -293,19 +312,19 @@ export default function LoanerTrains() {
               <div className="grid grid-cols-2 gap-2 text-sm pt-2 border-t">
                 <div className="flex items-center gap-1">
                   <Zap className="w-3 h-3 text-muted-foreground" />
-                  <span>{loco.horsepower} HP</span>
+                  <span>{loco.catalogItem.horsepower} HP</span>
                 </div>
                 <div className="flex items-center gap-1">
                   <TrendingUp className="w-3 h-3 text-muted-foreground" />
-                  <span>{loco.topSpeed} MPH</span>
+                  <span>{loco.catalogItem.topSpeed} MPH</span>
                 </div>
                 <div className="flex items-center gap-1">
                   <Weight className="w-3 h-3 text-muted-foreground" />
-                  <span>{loco.weight} tons</span>
+                  <span>{loco.catalogItem.weight} tons</span>
                 </div>
                 <div className="flex items-center gap-1">
                   <Gauge className="w-3 h-3 text-muted-foreground" />
-                  <span>{loco.reliability}%</span>
+                  <span>{loco.catalogItem.reliability}%</span>
                 </div>
               </div>
 
@@ -315,7 +334,7 @@ export default function LoanerTrains() {
                     ${loco.usedPrice.toLocaleString()}
                   </div>
                   <div className="text-xs text-muted-foreground line-through">
-                    ${loco.purchaseCost.toLocaleString()} new
+                    ${loco.catalogItem.purchaseCost.toLocaleString()} new
                   </div>
                 </div>
                 <Badge variant={canAfford(loco.usedPrice) ? "default" : "secondary"}>
@@ -334,15 +353,15 @@ export default function LoanerTrains() {
             <>
               <DialogHeader>
                 <DialogTitle className="text-2xl font-accent flex items-center gap-2">
-                  {selectedUsedLoco.model}
-                  {selectedUsedLoco.needsRepair && (
+                  {selectedUsedLoco.catalogItem.model}
+                  {selectedUsedLoco.health < 60 && (
                     <Badge variant="destructive" className="ml-2">
                       <AlertTriangle className="w-3 h-3 mr-1" />
                       Needs Repair
                     </Badge>
                   )}
                 </DialogTitle>
-                <DialogDescription>{selectedUsedLoco.manufacturer}</DialogDescription>
+                <DialogDescription>{selectedUsedLoco.catalogItem.manufacturer}</DialogDescription>
               </DialogHeader>
 
               <div className="space-y-4">
@@ -369,7 +388,7 @@ export default function LoanerTrains() {
                     </div>
                     <div>
                       <Label className="text-muted-foreground">Paint Condition</Label>
-                      <div className="font-semibold">Worn</div>
+                      <div className="font-semibold">{selectedUsedLoco.paintCondition}%</div>
                     </div>
                   </div>
                 </div>
@@ -378,19 +397,19 @@ export default function LoanerTrains() {
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <Label className="text-muted-foreground">Horsepower</Label>
-                    <div className="font-semibold">{selectedUsedLoco.horsepower} HP</div>
+                    <div className="font-semibold">{selectedUsedLoco.catalogItem.horsepower} HP</div>
                   </div>
                   <div>
                     <Label className="text-muted-foreground">Top Speed</Label>
-                    <div className="font-semibold">{selectedUsedLoco.topSpeed} MPH</div>
+                    <div className="font-semibold">{selectedUsedLoco.catalogItem.topSpeed} MPH</div>
                   </div>
                   <div>
                     <Label className="text-muted-foreground">Weight</Label>
-                    <div className="font-semibold">{selectedUsedLoco.weight} tons</div>
+                    <div className="font-semibold">{selectedUsedLoco.catalogItem.weight} tons</div>
                   </div>
                   <div>
                     <Label className="text-muted-foreground">Reliability</Label>
-                    <div className="font-semibold">{selectedUsedLoco.reliability}%</div>
+                    <div className="font-semibold">{selectedUsedLoco.catalogItem.reliability}%</div>
                   </div>
                 </div>
 

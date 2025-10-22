@@ -195,6 +195,22 @@ export const newsItemSchema = z.object({
 // PLAYER DATA (FIRESTORE DOCUMENT)
 // ============================================================================
 
+export const loanerTrainSchema = z.object({
+  id: z.string(), // Unique identifier for this loaner train
+  catalogItem: z.custom<LocomotiveCatalogItem>(), // The catalog item this is based on
+  usedPrice: z.number().positive(), // Discounted price for used condition
+  mileage: z.number().min(0), // Miles on the odometer
+  health: z.number().min(0).max(100), // Current condition (0-100)
+  paintCondition: z.number().min(0).max(100), // Paint condition (0-100)
+  previousOwner: z.string(), // Name of previous railroad company
+  previousOwnerColors: z.object({ // Previous owner's paint scheme
+    primaryColor: z.string(),
+    secondaryColor: z.string(),
+  }),
+});
+
+export type LoanerTrain = z.infer<typeof loanerTrainSchema>;
+
 export const playerDataSchema = z.object({
   player: playerSchema,
   company: companySchema.optional(),
@@ -203,6 +219,8 @@ export const playerDataSchema = z.object({
   jobs: z.array(jobSchema).default([]),
   marketData: marketDataSchema.optional(), // supply/demand tracking
   paintSchemes: z.array(paintSchemeSchema).default([]), // custom paint schemes
+  loanerTrains: z.array(loanerTrainSchema).default([]), // Dynamic used locomotive marketplace
+  loanerTrainsRefreshAt: z.number().optional(), // Timestamp for next loaner refresh (synced with jobs)
 });
 
 // ============================================================================
@@ -239,23 +257,110 @@ export interface LocomotiveCatalogItem {
 }
 
 export const LOCOMOTIVE_CATALOG: LocomotiveCatalogItem[] = [
-  // TIER 1: LOCAL FREIGHT
+  // CLASSIC ERA (1950s-1970s) - TIER 1
+  {
+    model: "EMD GP7",
+    manufacturer: "Electro-Motive Division (EMD)",
+    tier: 1,
+    tags: ["Local / Yard"],
+    horsepower: 1500,
+    topSpeed: 65,
+    weight: 125,
+    tractiveEffort: 56500,
+    fuelCapacity: 1200,
+    fuelEfficiency: 45,
+    reliability: 88,
+    maintenanceCost: 0.95,
+    purchaseCost: 850000,
+    resaleValue: 450000,
+    notes: "Classic first-generation road switcher from 1949. Proven reliability but outdated technology.",
+  },
+  {
+    model: "EMD GP9",
+    manufacturer: "Electro-Motive Division (EMD)",
+    tier: 1,
+    tags: ["Local / Yard"],
+    horsepower: 1750,
+    topSpeed: 65,
+    weight: 125,
+    tractiveEffort: 57000,
+    fuelCapacity: 1200,
+    fuelEfficiency: 47,
+    reliability: 90,
+    maintenanceCost: 1.00,
+    purchaseCost: 950000,
+    resaleValue: 520000,
+    notes: "Improved GP7 with better horsepower. Popular for branch line and shortline service.",
+  },
+  {
+    model: "ALCO RS-3",
+    manufacturer: "American Locomotive Company (ALCO)",
+    tier: 1,
+    tags: ["Local / Yard"],
+    horsepower: 1600,
+    topSpeed: 60,
+    weight: 115,
+    tractiveEffort: 54000,
+    fuelCapacity: 1100,
+    fuelEfficiency: 52,
+    reliability: 82,
+    maintenanceCost: 1.35,
+    purchaseCost: 780000,
+    resaleValue: 380000,
+    notes: "ALCO road switcher with distinctive sound. Higher maintenance but cheaper to buy.",
+  },
+  {
+    model: "EMD MP15DC",
+    manufacturer: "Electro-Motive Division (EMD)",
+    tier: 1,
+    tags: ["Local / Yard"],
+    horsepower: 1500,
+    topSpeed: 65,
+    weight: 124,
+    tractiveEffort: 64500,
+    fuelCapacity: 1600,
+    fuelEfficiency: 38,
+    reliability: 94,
+    maintenanceCost: 0.90,
+    purchaseCost: 1200000,
+    resaleValue: 750000,
+    notes: "Purpose-built switcher with excellent tractive effort for yard work.",
+  },
+  
+  // TRANSITION ERA (1980s-1990s) - TIER 1
   {
     model: "EMD GP38-2",
     manufacturer: "Electro-Motive Division (EMD)",
     tier: 1,
     tags: ["Local / Yard"],
     horsepower: 2000,
-    topSpeed: 65,
+    topSpeed: 71,
     weight: 125,
     tractiveEffort: 61000,
     fuelCapacity: 2000,
     fuelEfficiency: 48,
     reliability: 95,
     maintenanceCost: 1.15,
-    purchaseCost: 1800000,
-    resaleValue: 1300000,
+    purchaseCost: 1600000,
+    resaleValue: 980000,
     notes: "Reliable 4-axle road switcher; ideal for shortline and local freight operations.",
+  },
+  {
+    model: "EMD GP40-2",
+    manufacturer: "Electro-Motive Division (EMD)",
+    tier: 1,
+    tags: ["Local / Yard", "Long Haul"],
+    horsepower: 3000,
+    topSpeed: 71,
+    weight: 133,
+    tractiveEffort: 68200,
+    fuelCapacity: 2900,
+    fuelEfficiency: 65,
+    reliability: 94,
+    maintenanceCost: 1.30,
+    purchaseCost: 1850000,
+    resaleValue: 1150000,
+    notes: "Higher horsepower 4-axle unit. Great for branchline mainline work.",
   },
   {
     model: "EMD SW1500",
@@ -270,8 +375,8 @@ export const LOCOMOTIVE_CATALOG: LocomotiveCatalogItem[] = [
     fuelEfficiency: 42,
     reliability: 92,
     maintenanceCost: 1.05,
-    purchaseCost: 1500000,
-    resaleValue: 1100000,
+    purchaseCost: 1350000,
+    resaleValue: 820000,
     notes: "Versatile switcher for yard and light road work.",
   },
   {
@@ -285,30 +390,81 @@ export const LOCOMOTIVE_CATALOG: LocomotiveCatalogItem[] = [
     tractiveEffort: 63000,
     fuelCapacity: 2200,
     fuelEfficiency: 52,
+    reliability: 89,
+    maintenanceCost: 1.40,
+    purchaseCost: 1700000,
+    resaleValue: 1050000,
+    notes: "GE's answer to EMD's GP38-2. Solid performance with typical GE ruggedness.",
+  },
+  {
+    model: "GE B30-7",
+    manufacturer: "General Electric (GE)",
+    tier: 1,
+    tags: ["Local / Yard", "Long Haul"],
+    horsepower: 3000,
+    topSpeed: 70,
+    weight: 133,
+    tractiveEffort: 70000,
+    fuelCapacity: 2800,
+    fuelEfficiency: 68,
     reliability: 90,
-    maintenanceCost: 1.25,
-    purchaseCost: 1900000,
-    resaleValue: 1400000,
-    notes: "Powerful 4-axle unit with good fuel economy.",
+    maintenanceCost: 1.38,
+    purchaseCost: 1950000,
+    resaleValue: 1200000,
+    notes: "Powerful 4-axle unit capable of mainline service.",
   },
   
-  // TIER 2: MAINLINE FREIGHT
+  // CLASSIC 6-AXLE ERA (1970s-1980s) - TIER 2
+  {
+    model: "EMD SD40",
+    manufacturer: "Electro-Motive Division (EMD)",
+    tier: 2,
+    tags: ["Long Haul"],
+    horsepower: 3000,
+    topSpeed: 70,
+    weight: 182,
+    tractiveEffort: 90000,
+    fuelCapacity: 3000,
+    fuelEfficiency: 70,
+    reliability: 92,
+    maintenanceCost: 1.35,
+    purchaseCost: 2100000,
+    resaleValue: 1350000,
+    notes: "Original SD40 model. Predecessor to the legendary SD40-2.",
+  },
   {
     model: "EMD SD40-2",
     manufacturer: "Electro-Motive Division (EMD)",
     tier: 2,
     tags: ["Long Haul"],
     horsepower: 3000,
-    topSpeed: 70,
-    weight: 185,
-    tractiveEffort: 83000,
+    topSpeed: 71,
+    weight: 184,
+    tractiveEffort: 91000,
     fuelCapacity: 3000,
     fuelEfficiency: 68,
-    reliability: 94,
-    maintenanceCost: 1.45,
+    reliability: 96,
+    maintenanceCost: 1.28,
     purchaseCost: 2400000,
-    resaleValue: 1700000,
-    notes: "Legendary 6-axle workhorse; backbone of mainline freight.",
+    resaleValue: 1550000,
+    notes: "Legendary 6-axle workhorse; backbone of North American railroading for decades.",
+  },
+  {
+    model: "EMD SD45",
+    manufacturer: "Electro-Motive Division (EMD)",
+    tier: 2,
+    tags: ["Long Haul"],
+    horsepower: 3600,
+    topSpeed: 71,
+    weight: 194,
+    tractiveEffort: 96000,
+    fuelCapacity: 3600,
+    fuelEfficiency: 88,
+    reliability: 87,
+    maintenanceCost: 1.75,
+    purchaseCost: 2250000,
+    resaleValue: 1400000,
+    notes: "Higher horsepower but temperamental 20-cylinder engine. Thirsty but powerful.",
   },
   {
     model: "GE C30-7",
@@ -318,34 +474,87 @@ export const LOCOMOTIVE_CATALOG: LocomotiveCatalogItem[] = [
     horsepower: 3000,
     topSpeed: 70,
     weight: 195,
-    tractiveEffort: 85000,
+    tractiveEffort: 93000,
     fuelCapacity: 3200,
-    fuelEfficiency: 70,
-    reliability: 91,
-    maintenanceCost: 1.50,
-    purchaseCost: 2600000,
-    resaleValue: 1850000,
-    notes: "Heavy-duty 6-axle unit for demanding mainline service.",
+    fuelEfficiency: 72,
+    reliability: 90,
+    maintenanceCost: 1.42,
+    purchaseCost: 2300000,
+    resaleValue: 1480000,
+    notes: "GE's competitive 6-axle unit. Reliable but less popular than SD40-2.",
   },
+  {
+    model: "GE U30C",
+    manufacturer: "General Electric (GE)",
+    tier: 2,
+    tags: ["Long Haul"],
+    horsepower: 3000,
+    topSpeed: 70,
+    weight: 195,
+    tractiveEffort: 88000,
+    fuelCapacity: 3000,
+    fuelEfficiency: 75,
+    reliability: 85,
+    maintenanceCost: 1.65,
+    purchaseCost: 1950000,
+    resaleValue: 1250000,
+    notes: "Earlier GE universal series. Somewhat maintenance-intensive.",
+  },
+  
+  // MODERN TRANSITION ERA (1990s-2000s) - TIER 2
   {
     model: "EMD GP50",
     manufacturer: "Electro-Motive Division (EMD)",
     tier: 2,
     tags: ["Long Haul"],
     horsepower: 3500,
-    topSpeed: 75,
-    weight: 145,
-    tractiveEffort: 70000,
-    fuelCapacity: 2800,
-    fuelEfficiency: 72,
-    reliability: 88,
+    topSpeed: 70,
+    weight: 138,
+    tractiveEffort: 78000,
+    fuelCapacity: 2900,
+    fuelEfficiency: 75,
+    reliability: 91,
+    maintenanceCost: 1.48,
+    purchaseCost: 2650000,
+    resaleValue: 1720000,
+    notes: "Powerful 4-axle with microprocessor controls. Good for intermodal service.",
+  },
+  {
+    model: "EMD SD60",
+    manufacturer: "Electro-Motive Division (EMD)",
+    tier: 2,
+    tags: ["Long Haul"],
+    horsepower: 3800,
+    topSpeed: 72,
+    weight: 190,
+    tractiveEffort: 103000,
+    fuelCapacity: 4000,
+    fuelEfficiency: 82,
+    reliability: 93,
     maintenanceCost: 1.55,
-    purchaseCost: 2700000,
-    resaleValue: 1950000,
-    notes: "High-horsepower 4-axle for fast mainline work.",
+    purchaseCost: 2850000,
+    resaleValue: 1850000,
+    notes: "Improved SD40-2 design with more power. Last of the DC traction mainstream units.",
+  },
+  {
+    model: "GE C40-8W",
+    manufacturer: "General Electric (GE)",
+    tier: 2,
+    tags: ["Long Haul"],
+    horsepower: 4000,
+    topSpeed: 70,
+    weight: 207,
+    tractiveEffort: 110000,
+    fuelCapacity: 4200,
+    fuelEfficiency: 85,
+    reliability: 92,
+    maintenanceCost: 1.58,
+    purchaseCost: 2950000,
+    resaleValue: 1920000,
+    notes: "GE's 'Dash 8' series with wide cab. Transitional design before AC traction.",
   },
   
-  // TIER 3: SPECIAL FREIGHT
+  // MODERN AC TRACTION ERA (2000s-2010s) - TIER 3
   {
     model: "EMD SD70MAC",
     manufacturer: "Electro-Motive Division (EMD)",
@@ -358,10 +567,44 @@ export const LOCOMOTIVE_CATALOG: LocomotiveCatalogItem[] = [
     fuelCapacity: 4000,
     fuelEfficiency: 88,
     reliability: 96,
-    maintenanceCost: 1.80,
-    purchaseCost: 3200000,
-    resaleValue: 2300000,
-    notes: "Modern AC traction locomotive for heavy-haul operations.",
+    maintenanceCost: 1.65,
+    purchaseCost: 2950000,
+    resaleValue: 1920000,
+    notes: "First widespread AC traction locomotive. Revolutionary for heavy-haul operations.",
+  },
+  {
+    model: "EMD SD70ACe",
+    manufacturer: "Electro-Motive Division (EMD)",
+    tier: 3,
+    tags: ["Long Haul"],
+    horsepower: 4300,
+    topSpeed: 75,
+    weight: 207,
+    tractiveEffort: 145000,
+    fuelCapacity: 4700,
+    fuelEfficiency: 90,
+    reliability: 95,
+    maintenanceCost: 1.72,
+    purchaseCost: 3150000,
+    resaleValue: 2050000,
+    notes: "Enhanced SD70MAC with improved electronics and EPA Tier 2 compliance.",
+  },
+  {
+    model: "EMD SD70M-2",
+    manufacturer: "Electro-Motive Division (EMD)",
+    tier: 3,
+    tags: ["Long Haul"],
+    horsepower: 4300,
+    topSpeed: 70,
+    weight: 207,
+    tractiveEffort: 145000,
+    fuelCapacity: 4700,
+    fuelEfficiency: 92,
+    reliability: 94,
+    maintenanceCost: 1.70,
+    purchaseCost: 3100000,
+    resaleValue: 2020000,
+    notes: "DC traction version of SD70ACe. Preferred by some railroads for simplicity.",
   },
   {
     model: "GE AC4400CW",
@@ -369,16 +612,33 @@ export const LOCOMOTIVE_CATALOG: LocomotiveCatalogItem[] = [
     tier: 3,
     tags: ["Long Haul"],
     horsepower: 4400,
-    topSpeed: 75,
-    weight: 215,
+    topSpeed: 70,
+    weight: 212,
     tractiveEffort: 145000,
     fuelCapacity: 4200,
     fuelEfficiency: 92,
     reliability: 95,
-    maintenanceCost: 1.85,
-    purchaseCost: 3400000,
-    resaleValue: 2450000,
-    notes: "Powerful AC traction unit for coal and intermodal trains.",
+    maintenanceCost: 1.68,
+    purchaseCost: 3050000,
+    resaleValue: 1980000,
+    notes: "GE's most successful AC traction model. Workhorse of coal and intermodal trains.",
+  },
+  {
+    model: "GE AC6000CW",
+    manufacturer: "General Electric (GE)",
+    tier: 3,
+    tags: ["Long Haul"],
+    horsepower: 6000,
+    topSpeed: 75,
+    weight: 216,
+    tractiveEffort: 166000,
+    fuelCapacity: 5500,
+    fuelEfficiency: 118,
+    reliability: 88,
+    maintenanceCost: 2.15,
+    purchaseCost: 3500000,
+    resaleValue: 2280000,
+    notes: "Most powerful single-engine diesel. Reliability issues led to many being derated.",
   },
   {
     model: "EMD SD90MAC",
@@ -390,12 +650,82 @@ export const LOCOMOTIVE_CATALOG: LocomotiveCatalogItem[] = [
     weight: 230,
     tractiveEffort: 160000,
     fuelCapacity: 5000,
-    fuelEfficiency: 105,
-    reliability: 93,
-    maintenanceCost: 2.10,
-    purchaseCost: 4800000,
-    resaleValue: 3400000,
-    notes: "Ultimate heavy-haul locomotive with exceptional tractive effort.",
+    fuelEfficiency: 112,
+    reliability: 86,
+    maintenanceCost: 2.25,
+    purchaseCost: 3600000,
+    resaleValue: 2340000,
+    notes: "Designed for 6000hp H-engine that never materialized. Most built with 4300hp 16-710.",
+  },
+  
+  // LATEST GENERATION (2010s-2020s) - TIER 3
+  {
+    model: "GE ES44AC",
+    manufacturer: "General Electric (GE)",
+    tier: 3,
+    tags: ["Long Haul"],
+    horsepower: 4400,
+    topSpeed: 70,
+    weight: 213,
+    tractiveEffort: 166000,
+    fuelCapacity: 5000,
+    fuelEfficiency: 85,
+    reliability: 97,
+    maintenanceCost: 1.58,
+    purchaseCost: 3200000,
+    resaleValue: 2080000,
+    notes: "GE Evolution Series with EPA Tier 2 compliance. Excellent fuel economy and reliability.",
+  },
+  {
+    model: "GE ET44AC",
+    manufacturer: "General Electric (GE)",
+    tier: 3,
+    tags: ["Long Haul"],
+    horsepower: 4400,
+    topSpeed: 70,
+    weight: 216,
+    tractiveEffort: 166000,
+    fuelCapacity: 5000,
+    fuelEfficiency: 80,
+    reliability: 96,
+    maintenanceCost: 1.62,
+    purchaseCost: 3350000,
+    resaleValue: 2180000,
+    notes: "Latest GE Evolution with EPA Tier 4 emissions. Advanced diagnostics and fuel efficiency.",
+  },
+  {
+    model: "EMD SD70ACe-T4",
+    manufacturer: "Progress Rail (EMD)",
+    tier: 3,
+    tags: ["Long Haul"],
+    horsepower: 4500,
+    topSpeed: 75,
+    weight: 214,
+    tractiveEffort: 152000,
+    fuelCapacity: 4900,
+    fuelEfficiency: 82,
+    reliability: 95,
+    maintenanceCost: 1.68,
+    purchaseCost: 3400000,
+    resaleValue: 2210000,
+    notes: "EMD's Tier 4 compliant locomotive. Modern EPA-friendly design with proven AC traction.",
+  },
+  {
+    model: "Wabtec FLXdrive",
+    manufacturer: "Wabtec (GE Transportation)",
+    tier: 3,
+    tags: ["Long Haul"],
+    horsepower: 4400,
+    topSpeed: 70,
+    weight: 230,
+    tractiveEffort: 166000,
+    fuelCapacity: 0, // Battery electric
+    fuelEfficiency: 15, // kWh equivalent representation
+    reliability: 92,
+    maintenanceCost: 0.95,
+    purchaseCost: 5500000,
+    resaleValue: 3575000,
+    notes: "Battery-electric locomotive. Zero emissions, lower operating costs, but high upfront price.",
   },
 ];
 
@@ -564,4 +894,75 @@ export function generateUsedLocomotive(catalogItem: LocomotiveCatalogItem): Used
     previousOwner,
     needsRepair,
   };
+}
+
+// Railroad company paint schemes for loaner trains
+const RAILROAD_PAINT_SCHEMES = [
+  { primaryColor: "#1e3a8a", secondaryColor: "#fbbf24" }, // Blue & Gold
+  { primaryColor: "#7f1d1d", secondaryColor: "#d1d5db" }, // Maroon & Silver
+  { primaryColor: "#14532d", secondaryColor: "#fef3c7" }, // Dark Green & Cream
+  { primaryColor: "#78350f", secondaryColor: "#fef08a" }, // Brown & Yellow
+  { primaryColor: "#991b1b", secondaryColor: "#f3f4f6" }, // Red & Light Gray
+  { primaryColor: "#1e40af", secondaryColor: "#fca5a5" }, // Royal Blue & Light Red
+  { primaryColor: "#064e3b", secondaryColor: "#fed7aa" }, // Forest Green & Peach
+  { primaryColor: "#6b21a8", secondaryColor: "#fde047" }, // Purple & Yellow
+  { primaryColor: "#92400e", secondaryColor: "#e5e7eb" }, // Burnt Orange & Gray
+  { primaryColor: "#047857", secondaryColor: "#fef9c3" }, // Emerald & Light Yellow
+];
+
+export function generateLoanerTrain(catalogItem: LocomotiveCatalogItem): LoanerTrain {
+  // Generate mileage based on era (older trains have more miles)
+  const baseYear = catalogItem.model.includes("GP7") || catalogItem.model.includes("GP9") || catalogItem.model.includes("ALCO") ? 1960 : 
+                   catalogItem.model.includes("SD40") || catalogItem.model.includes("GP38") || catalogItem.model.includes("SW") ? 1980 :
+                   catalogItem.model.includes("ES44") || catalogItem.model.includes("ET44") || catalogItem.model.includes("T4") ? 2015 : 1995;
+  
+  const age = 2025 - baseYear;
+  const avgMilesPerYear = 30000 + Math.random() * 40000; // 30K-70K miles per year
+  const baseMileage = age * avgMilesPerYear;
+  const mileage = Math.floor(baseMileage * (0.7 + Math.random() * 0.6)); // ±30% variation
+  
+  // Calculate health based on mileage
+  const health = calculateLocomotiveHealth(mileage, catalogItem.reliability);
+  
+  // Paint condition degrades faster than mechanical health
+  const paintCondition = Math.max(20, Math.min(100, health - Math.random() * 30));
+  
+  // Price based on condition
+  const healthFactor = health / 100;
+  const paintFactor = paintCondition / 100;
+  const depreciation = 0.20 + ((100 - health) / 100) * 0.45; // 20-65% off based on health
+  const usedPrice = Math.floor(catalogItem.resaleValue * (1 - depreciation));
+  
+  // Random previous owner and paint scheme
+  const previousOwner = FICTIONAL_RAILROAD_NAMES[Math.floor(Math.random() * FICTIONAL_RAILROAD_NAMES.length)];
+  const previousOwnerColors = RAILROAD_PAINT_SCHEMES[Math.floor(Math.random() * RAILROAD_PAINT_SCHEMES.length)];
+  
+  return {
+    id: crypto.randomUUID(),
+    catalogItem,
+    usedPrice,
+    mileage,
+    health: Math.round(health),
+    paintCondition: Math.round(paintCondition),
+    previousOwner,
+    previousOwnerColors,
+  };
+}
+
+// Generate 2-7 random loaner trains from catalog
+export function generateLoanerTrainMarket(count?: number): LoanerTrain[] {
+  const numTrains = count || (Math.floor(Math.random() * 6) + 2); // 2-7 trains
+  const loanerTrains: LoanerTrain[] = [];
+  
+  // Randomly select locomotives from catalog
+  const availableCatalog = [...LOCOMOTIVE_CATALOG];
+  
+  for (let i = 0; i < numTrains && availableCatalog.length > 0; i++) {
+    const randomIndex = Math.floor(Math.random() * availableCatalog.length);
+    const catalogItem = availableCatalog.splice(randomIndex, 1)[0];
+    loanerTrains.push(generateLoanerTrain(catalogItem));
+  }
+  
+  // Sort by price (cheapest first)
+  return loanerTrains.sort((a, b) => a.usedPrice - b.usedPrice);
 }

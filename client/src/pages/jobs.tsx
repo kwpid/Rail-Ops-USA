@@ -11,7 +11,7 @@ import { useToast } from "@/hooks/use-toast";
 import { MapPin, Package, Zap, DollarSign, Clock, Star, Lock, ArrowRight, TrendingUp, TrendingDown, Minus, PackageOpen, RefreshCw } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
 import type { Job, CarManifest } from "@shared/schema";
-import { FREIGHT_TYPES } from "@shared/schema";
+import { FREIGHT_TYPES, generateLoanerTrainMarket } from "@shared/schema";
 import { doc, updateDoc, deleteField } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { calculateLevel, getXpForNextLevel } from "@shared/schema";
@@ -292,26 +292,39 @@ export default function Jobs() {
   const company = playerData.company!;
 
   useEffect(() => {
-    const initializeJobs = async () => {
+    const initializeJobsAndMarket = async () => {
+      const updates: any = {};
+      
+      // Initialize jobs if none exist
       if (playerData.jobs.length === 0) {
         // Spawn all tiers regardless of level (level gating only prevents assignment)
         const tier1 = generateJobs(1, company.city, stats.level);
         const tier2 = generateJobs(2, company.city, stats.level);
         const tier3 = generateJobs(3, company.city, stats.level);
-        
+        updates.jobs = [...tier1, ...tier2, ...tier3];
+      }
+      
+      // Initialize loaner trains if none exist
+      if (!playerData.loanerTrains || playerData.loanerTrains.length === 0) {
+        const initialLoanerTrains = generateLoanerTrainMarket();
+        const nextRefreshTimestamp = Date.now() + (30 * 60 * 1000); // 30 minutes from now
+        updates.loanerTrains = initialLoanerTrains;
+        updates.loanerTrainsRefreshAt = nextRefreshTimestamp;
+      }
+      
+      // Only update if we have changes
+      if (Object.keys(updates).length > 0) {
         try {
           const playerRef = doc(db, "players", user.uid);
-          await updateDoc(playerRef, {
-            jobs: [...tier1, ...tier2, ...tier3],
-          });
+          await updateDoc(playerRef, updates);
         } catch (error) {
-          console.error("Error initializing jobs:", error);
+          console.error("Error initializing market:", error);
         }
       }
     };
 
-    initializeJobs();
-  }, [playerData.jobs.length, company.city, stats.level, user.uid]);
+    initializeJobsAndMarket();
+  }, [playerData.jobs.length, playerData.loanerTrains, company.city, stats.level, user.uid]);
 
   // Auto-refresh jobs every 30 minutes (at XX:00 and XX:30)
   useEffect(() => {
@@ -343,18 +356,24 @@ export default function Jobs() {
       const tier2 = generateJobs(2, company.city, stats.level);
       const tier3 = generateJobs(3, company.city, stats.level);
       
+      // Also refresh loaner trains (2-7 random locomotives)
+      const newLoanerTrains = generateLoanerTrainMarket();
+      const nextRefreshTimestamp = now.getTime() + (30 * 60 * 1000); // 30 minutes from now
+      
       try {
         const playerRef = doc(db, "players", user.uid);
         await updateDoc(playerRef, {
           jobs: [...ongoingJobs, ...tier1, ...tier2, ...tier3],
+          loanerTrains: newLoanerTrains,
+          loanerTrainsRefreshAt: nextRefreshTimestamp,
         });
         
         toast({
-          title: "Jobs Refreshed",
-          description: "New freight opportunities are now available",
+          title: "Market Refreshed",
+          description: `New freight opportunities and ${newLoanerTrains.length} used locomotives available`,
         });
       } catch (error) {
-        console.error("Error refreshing jobs:", error);
+        console.error("Error refreshing market:", error);
       }
     };
 
