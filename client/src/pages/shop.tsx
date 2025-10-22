@@ -14,6 +14,7 @@ import { LOCOMOTIVE_CATALOG, type LocomotiveCatalogItem, generateUsedLocomotive,
 import { Zap, TrendingUp, Gauge, Weight, DollarSign, Search, Filter, Fuel, Tag, Activity } from "lucide-react";
 import { doc } from "firebase/firestore";
 import { getDbOrThrow, safeUpdateDoc } from "@/lib/firebase";
+import { generateUUID } from "@/lib/uuid";
 
 export default function Shop() {
   const { playerData, user, refreshPlayerData } = useAuth();
@@ -103,7 +104,7 @@ export default function Shop() {
         const unitNumber = `#${nextId.toString().padStart(4, "0")}`;
         
         const newLoco: any = {
-          id: crypto.randomUUID(),
+          id: generateUUID(),
           unitNumber,
           model: catalogItem.model,
           manufacturer: catalogItem.manufacturer,
@@ -179,7 +180,7 @@ export default function Shop() {
       const unitNumber = `#${nextId.toString().padStart(4, "0")}`;
 
       const newLoco: any = {
-        id: crypto.randomUUID(),
+        id: generateUUID(),
         unitNumber,
         model: usedItem.model,
         manufacturer: usedItem.manufacturer,

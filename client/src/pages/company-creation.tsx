@@ -10,6 +10,7 @@ import { doc } from "firebase/firestore";
 import { getDbOrThrow, safeUpdateDoc } from "@/lib/firebase";
 import { Loader2, Building2, MapPin, Palette } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { generateUUID } from "@/lib/uuid";
 
 const PRESET_COLORS = [
   { name: "Railroad Blue", primary: "#1e3a8a", secondary: "#dbeafe" },
@@ -50,7 +51,7 @@ export default function CompanyCreation() {
         },
         locomotives: [
           {
-            id: crypto.randomUUID(),
+            id: generateUUID(),
             unitNumber: "#0001",
             model: starterLoco.model,
             manufacturer: starterLoco.manufacturer,

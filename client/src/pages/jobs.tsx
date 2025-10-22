@@ -16,6 +16,7 @@ import { doc, deleteField } from "firebase/firestore";
 import { getDbOrThrow, safeUpdateDoc } from "@/lib/firebase";
 import { calculateLevel, getXpForNextLevel } from "@shared/schema";
 import { LevelUpNotification } from "@/components/level-up-notification";
+import { generateUUID } from "@/lib/uuid";
 
 const CAR_TYPES = [
   { type: "Boxcar", contents: ["General Freight", "Packaged Goods", "Appliances", "Paper Products"] },
@@ -155,7 +156,7 @@ const generateJobs = (tier: 1 | 2 | 3, playerCity: string, playerLevel: number):
       const basePayout = distance * carCount * 25; // Higher rate per mile for local
       
       jobs.push({
-        id: crypto.randomUUID(),
+        id: generateUUID(),
         jobId: `LCL-${String(i + 1).padStart(3, "0")}`,
         tier: 1,
         jobType: "local_freight",
@@ -184,7 +185,7 @@ const generateJobs = (tier: 1 | 2 | 3, playerCity: string, playerLevel: number):
       const basePayout = carCount * 220;
       
       jobs.push({
-        id: crypto.randomUUID(),
+        id: generateUUID(),
         jobId: `YRD-${String(i + 1).padStart(3, "0")}`,
         tier: 1,
         jobType: "yard_switching",
@@ -220,7 +221,7 @@ const generateJobs = (tier: 1 | 2 | 3, playerCity: string, playerLevel: number):
       const basePayout = distance * carCount * 30;
       
       jobs.push({
-        id: crypto.randomUUID(),
+        id: generateUUID(),
         jobId: `MLF-${String(i + 1).padStart(3, "0")}`,
         tier: 2,
         jobType: "mainline_freight",
@@ -252,7 +253,7 @@ const generateJobs = (tier: 1 | 2 | 3, playerCity: string, playerLevel: number):
       const basePayout = distance * carCount * 55;
       
       jobs.push({
-        id: crypto.randomUUID(),
+        id: generateUUID(),
         jobId: `SPF-${String(i + 1).padStart(3, "0")}`,
         tier: 3,
         jobType: "special_freight",

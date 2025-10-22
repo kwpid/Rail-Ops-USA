@@ -13,6 +13,7 @@ import { type LoanerTrain, PAINT_COSTS } from "@shared/schema";
 import { Zap, TrendingUp, Gauge, Weight, DollarSign, Search, Filter, Paintbrush, AlertTriangle, Tag, Wrench } from "lucide-react";
 import { doc } from "firebase/firestore";
 import { getDbOrThrow, safeUpdateDoc } from "@/lib/firebase";
+import { generateUUID } from "@/lib/uuid";
 
 export default function LoanerTrains() {
   const { playerData, user, refreshPlayerData } = useAuth();
@@ -98,7 +99,7 @@ export default function LoanerTrains() {
 
       const catalogItem = loanerTrain.catalogItem;
       const newLoco: any = {
-        id: crypto.randomUUID(),
+        id: generateUUID(),
         unitNumber,
         model: catalogItem.model,
         manufacturer: catalogItem.manufacturer,

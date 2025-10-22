@@ -15,6 +15,7 @@ import type { Locomotive } from "@shared/schema";
 import { getLocomotiveConditionStatus } from "@shared/schema";
 import { doc } from "firebase/firestore";
 import { getDbOrThrow, safeUpdateDoc } from "@/lib/firebase";
+import { generateUUID } from "@/lib/uuid";
 
 export default function Inventory() {
   const { playerData, user, refreshPlayerData } = useAuth();
@@ -260,7 +261,7 @@ export default function Inventory() {
       const db = getDbOrThrow();
       const playerRef = doc(db, "players", user.uid);
       const newScheme = {
-        id: crypto.randomUUID(),
+        id: generateUUID(),
         ...newPaintScheme,
         createdAt: Date.now(),
       };
