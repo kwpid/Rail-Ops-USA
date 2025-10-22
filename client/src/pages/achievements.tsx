@@ -6,7 +6,7 @@ import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Trophy, Calendar, Target, Gift, Coins, DollarSign, CheckCircle2, Lock } from "lucide-react";
-import { doc } from "firebase/firestore";
+import { doc, runTransaction, increment } from "firebase/firestore";
 import { getDbOrThrow, safeUpdateDoc } from "@/lib/firebase";
 import { useToast } from "@/hooks/use-toast";
 import type { Achievement } from "@shared/schema";
@@ -45,16 +45,24 @@ export default function AchievementsPage() {
       const db = getDbOrThrow();
       const playerDocRef = doc(db, "players", user.uid);
 
-      const updatedAchievements = playerData.achievements.map(a => 
-        a.id === achievement.id 
-          ? { ...a, isCompleted: true, completedAt: Date.now() }
-          : a
-      );
+      // Use transaction to increment stats based on live Firebase values
+      await runTransaction(db, async (transaction) => {
+        const playerDoc = await transaction.get(playerDocRef);
+        if (!playerDoc.exists()) throw new Error("Player document not found");
+        
+        const currentData = playerDoc.data();
+        const updatedAchievements = (currentData.achievements || []).map((a: any) => 
+          a.id === achievement.id 
+            ? { ...a, isCompleted: true, completedAt: Date.now() }
+            : a
+        );
 
-      await safeUpdateDoc(playerDocRef, {
-        achievements: updatedAchievements,
-        "stats.points": stats.points + achievement.rewards.points,
-        "stats.cash": stats.cash + achievement.rewards.cash,
+        // Update with increments for points/cash
+        transaction.update(playerDocRef, {
+          achievements: updatedAchievements,
+          "stats.points": increment(achievement.rewards.points),
+          "stats.cash": increment(achievement.rewards.cash),
+        });
       });
 
       toast({

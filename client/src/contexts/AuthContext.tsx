@@ -8,7 +8,7 @@ import {
 import { doc, getDoc, setDoc, onSnapshot } from "firebase/firestore";
 import { getAuthOrThrow, getGoogleProviderOrThrow, getDbOrThrow, firebaseConfigured } from "@/lib/firebase";
 import type { PlayerData, Achievement } from "@shared/schema";
-import { generateWeeklyAchievements, generateCareerAchievements, generateEventAchievements, HERITAGE_PAINT_SCHEMES_CATALOG, getNextFriday, shouldRefreshWeeklyAchievements } from "@shared/schema";
+import { generateWeeklyAchievements, generateCareerAchievements, generateEventAchievements, HERITAGE_PAINT_SCHEMES_CATALOG, SPECIAL_LIVERIES_CATALOG, getNextFriday, shouldRefreshWeeklyAchievements } from "@shared/schema";
 
 interface AuthContextType {
   user: FirebaseUser | null;
@@ -30,8 +30,28 @@ export function useAuth() {
 }
 
 // Normalize PlayerData to ensure all fields exist with proper defaults
+// CRITICAL: Only provide defaults for truly missing fields - never overwrite existing values
 function normalizePlayerData(data: Partial<PlayerData>, userId: string): PlayerData {
   const now = Date.now();
+  
+  // Deep merge stats to preserve all existing Firebase values
+  const defaultStats = {
+    cash: 500000,
+    xp: 0,
+    level: 1,
+    nextLocoId: 2,
+    points: 10,
+    totalJobsCompleted: 0,
+  };
+  
+  const mergedStats = data.stats ? {
+    cash: data.stats.cash !== undefined ? data.stats.cash : defaultStats.cash,
+    xp: data.stats.xp !== undefined ? data.stats.xp : defaultStats.xp,
+    level: data.stats.level !== undefined ? data.stats.level : defaultStats.level,
+    nextLocoId: data.stats.nextLocoId !== undefined ? data.stats.nextLocoId : defaultStats.nextLocoId,
+    points: data.stats.points !== undefined ? data.stats.points : defaultStats.points,
+    totalJobsCompleted: data.stats.totalJobsCompleted !== undefined ? data.stats.totalJobsCompleted : defaultStats.totalJobsCompleted,
+  } : defaultStats;
   
   return {
     player: data.player || {
@@ -41,22 +61,37 @@ function normalizePlayerData(data: Partial<PlayerData>, userId: string): PlayerD
       createdAt: now,
     },
     company: data.company,
-    stats: {
-      cash: data.stats?.cash ?? 500000,
-      xp: data.stats?.xp ?? 0,
-      level: data.stats?.level ?? 1,
-      nextLocoId: data.stats?.nextLocoId ?? 2,
-      points: data.stats?.points ?? 10,
-      totalJobsCompleted: data.stats?.totalJobsCompleted ?? 0,
-    },
+    stats: mergedStats,
     locomotives: data.locomotives || [],
     jobs: data.jobs || [],
     paintSchemes: data.paintSchemes || [],
-    heritagePaintSchemes: data.heritagePaintSchemes || HERITAGE_PAINT_SCHEMES_CATALOG.map(scheme => ({
-      ...scheme,
-      createdAt: now,
-      isPurchased: false,
-    })),
+    heritagePaintSchemes: data.heritagePaintSchemes || [],
+    specialLiveries: (() => {
+      // Migration: Check if Alpha livery exists in legacy heritage schemes
+      const legacyAlphaHeritage = (data.heritagePaintSchemes || []).find((s: any) => s.id === "alpha_livery");
+      const hasAlphaInSpecial = (data.specialLiveries || []).find((s: any) => s.id === "alpha_livery");
+      
+      if (data.specialLiveries) {
+        // If special liveries exist, use them
+        if (legacyAlphaHeritage && legacyAlphaHeritage.isPurchased && !hasAlphaInSpecial?.isUnlocked) {
+          // Migrate legacy Alpha from heritage to special liveries
+          return data.specialLiveries.map((s: any) => 
+            s.id === "alpha_livery" 
+              ? { ...s, isUnlocked: true, appliedToLocoId: legacyAlphaHeritage.appliedToLocoId, unlockedAt: legacyAlphaHeritage.createdAt }
+              : s
+          );
+        }
+        return data.specialLiveries;
+      }
+      
+      // Initialize special liveries from catalog
+      return SPECIAL_LIVERIES_CATALOG.map(livery => ({
+        ...livery,
+        isUnlocked: legacyAlphaHeritage?.isPurchased || false,
+        appliedToLocoId: legacyAlphaHeritage?.appliedToLocoId,
+        unlockedAt: legacyAlphaHeritage?.createdAt,
+      }));
+    })(),
     achievements: data.achievements || [
       ...generateWeeklyAchievements(),
       ...generateCareerAchievements(),
@@ -164,10 +199,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           locomotives: [],
           jobs: [],
           paintSchemes: [],
-          heritagePaintSchemes: HERITAGE_PAINT_SCHEMES_CATALOG.map(scheme => ({
-            ...scheme,
-            createdAt: now,
-            isPurchased: false,
+          heritagePaintSchemes: [],
+          specialLiveries: SPECIAL_LIVERIES_CATALOG.map(livery => ({
+            ...livery,
+            isUnlocked: false,
           })),
           achievements: [
             ...generateWeeklyAchievements(),

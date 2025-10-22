@@ -12,7 +12,7 @@ import { MapPin, Package, Zap, DollarSign, Clock, Star, Lock, ArrowRight, Trendi
 import { Progress } from "@/components/ui/progress";
 import type { Job, CarManifest } from "@shared/schema";
 import { FREIGHT_TYPES, generateLoanerTrainMarket } from "@shared/schema";
-import { doc, deleteField } from "firebase/firestore";
+import { doc, deleteField, runTransaction, increment } from "firebase/firestore";
 import { getDbOrThrow, safeUpdateDoc } from "@/lib/firebase";
 import { calculateLevel, getXpForNextLevel } from "@shared/schema";
 import { LevelUpNotification } from "@/components/level-up-notification";
@@ -536,28 +536,38 @@ export default function Jobs() {
       const job = playerData.jobs.find((j) => j.id === jobId);
       if (!job || job.status !== "in_progress") return;
 
-      const newCash = stats.cash + job.payout;
-      const newXp = stats.xp + job.xpReward;
-      const oldLevel = stats.level;
-      const newLevel = calculateLevel(newXp);
+      // Use transaction to increment stats based on live Firebase values, not normalized memory
+      const result = await runTransaction(db, async (transaction) => {
+        const playerDoc = await transaction.get(playerRef);
+        if (!playerDoc.exists()) throw new Error("Player document not found");
+        
+        const currentData = playerDoc.data();
+        const currentXp = currentData.stats?.xp || 0;
+        const currentLevel = currentData.stats?.level || 1;
+        const newXp = currentXp + job.xpReward;
+        const newLevel = calculateLevel(newXp);
 
-      // Remove the completed job and free up locomotives
-      const updatedJobs = playerData.jobs.filter((j) => j.id !== jobId);
+        // Remove the completed job and free up locomotives
+        const updatedJobs = (currentData.jobs || []).filter((j: any) => j.id !== jobId);
+        const updatedLocos = (currentData.locomotives || []).map((l: any) => {
+          if (l.assignedJobId === jobId) {
+            const { assignedJobId, ...locoWithoutJobId } = l;
+            return { ...locoWithoutJobId, status: "available" };
+          }
+          return l;
+        });
 
-      const updatedLocos = locomotives.map((l) => {
-        if (l.assignedJobId === jobId) {
-          const { assignedJobId, ...locoWithoutJobId } = l;
-          return { ...locoWithoutJobId, status: "available" as const };
-        }
-        return l;
-      });
+        // Update with increments for cash/xp and calculated level
+        transaction.update(playerRef, {
+          jobs: updatedJobs,
+          locomotives: updatedLocos,
+          "stats.cash": increment(job.payout),
+          "stats.xp": increment(job.xpReward),
+          "stats.level": newLevel,
+          "stats.totalJobsCompleted": increment(1),
+        });
 
-      await safeUpdateDoc(playerRef, {
-        jobs: updatedJobs,
-        locomotives: updatedLocos,
-        "stats.cash": newCash,
-        "stats.xp": newXp,
-        "stats.level": newLevel,
+        return { newLevel, oldLevel: currentLevel };
       });
 
       await refreshPlayerData();
@@ -567,11 +577,11 @@ export default function Jobs() {
         description: `Earned $${job.payout.toLocaleString()} and ${job.xpReward} XP`,
       });
 
-      if (newLevel > oldLevel) {
+      if (result.newLevel > result.oldLevel) {
         const unlocks = [];
-        if (newLevel === 10) unlocks.push("Mainline Freight Jobs");
-        if (newLevel === 50) unlocks.push("Special Freight Jobs");
-        setLevelUpInfo({ level: newLevel, unlocks });
+        if (result.newLevel === 10) unlocks.push("Mainline Freight Jobs");
+        if (result.newLevel === 50) unlocks.push("Special Freight Jobs");
+        setLevelUpInfo({ level: result.newLevel, unlocks });
       }
     } catch (error) {
       console.error(error);

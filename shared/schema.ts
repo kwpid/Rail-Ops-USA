@@ -77,6 +77,7 @@ export const locomotiveSchema = z.object({
   paintCondition: z.number().min(0).max(100).default(100),
   paintSchemeId: z.string().optional(), // Reference to paint scheme
   heritagePaintSchemeId: z.string().optional(), // Reference to heritage paint scheme (exclusive)
+  specialLiveryId: z.string().optional(), // Reference to special livery (challenge-only, like Alpha livery)
   previousOwnerName: z.string().optional(), // For used locomotives - previous company name
   isPatched: z.boolean().optional(), // True if paint was patched instead of fully repainted
   status: z.enum(["available", "assigned", "needs_repair", "in_paint_shop", "stored"]).default("available"),
@@ -115,7 +116,39 @@ export const PAINT_COSTS = {
 };
 
 // ============================================================================
-// HERITAGE / SPECIAL PAINT SCHEMES
+// SPECIAL LIVERIES (CHALLENGE-ONLY)
+// ============================================================================
+
+export const specialLiverySchema = z.object({
+  id: z.string(), // e.g., "alpha_livery"
+  name: z.string().min(1).max(50),
+  description: z.string(),
+  primaryColor: z.string(), // hex color
+  secondaryColor: z.string(), // hex color
+  accentColor: z.string().optional(), // hex color
+  stripePattern: z.enum(["solid", "striped", "checkered", "custom"]).default("custom"),
+  isUnlocked: z.boolean().default(false), // Unlocked through challenge
+  appliedToLocoId: z.string().optional(), // Which single locomotive has this livery
+  unlockedAt: z.number().optional(), // When it was unlocked
+});
+
+export type SpecialLivery = z.infer<typeof specialLiverySchema>;
+
+// Special liveries catalog (challenge-only rewards)
+export const SPECIAL_LIVERIES_CATALOG: Omit<SpecialLivery, 'isUnlocked' | 'appliedToLocoId' | 'unlockedAt'>[] = [
+  {
+    id: "alpha_livery",
+    name: "Alpha Livery",
+    description: "Exclusive paint scheme for alpha testers who completed 250 jobs",
+    primaryColor: "#9333ea", // Purple
+    secondaryColor: "#fbbf24", // Gold
+    accentColor: "#1e293b", // Dark slate
+    stripePattern: "custom",
+  },
+];
+
+// ============================================================================
+// HERITAGE PAINT SCHEMES (CUSTOM USER-CREATED)
 // ============================================================================
 
 export const heritagePaintSchemeSchema = z.object({
@@ -299,7 +332,8 @@ export const playerDataSchema = z.object({
   jobs: z.array(jobSchema).default([]),
   marketData: marketDataSchema.optional(), // supply/demand tracking
   paintSchemes: z.array(paintSchemeSchema).default([]), // custom paint schemes
-  heritagePaintSchemes: z.array(heritagePaintSchemeSchema).default([]), // Heritage/special paint schemes
+  heritagePaintSchemes: z.array(heritagePaintSchemeSchema).default([]), // Custom user-created heritage schemes
+  specialLiveries: z.array(specialLiverySchema).default([]), // Challenge-only special liveries (Alpha, etc.)
   achievements: z.array(achievementSchema).default([]), // All achievements (weekly, career, event)
   weeklyAchievementsRefreshAt: z.number().optional(), // Timestamp for next weekly achievements refresh
   loanerTrains: z.array(loanerTrainSchema).default([]), // Dynamic used locomotive marketplace
@@ -1470,22 +1504,25 @@ export function shouldRefreshWeeklyAchievements(refreshAt?: number): boolean {
 }
 
 // ============================================================================
-// HERITAGE PAINT SCHEMES CATALOG
+// HERITAGE PAINT SCHEMES CATALOG (NOW EMPTY - USERS CREATE THEIR OWN)
 // ============================================================================
 
+// Heritage schemes are now custom user-created designs
+// Users pay to create their own heritage liveries with custom colors and names
+// Cost to create: $500,000 + 100-150 points
+export const HERITAGE_CREATION_COST = {
+  CASH: 500000,
+  POINTS: 100,
+  LEVEL_REQUIRED: 25,
+};
+
 export const HERITAGE_PAINT_SCHEMES_CATALOG: Omit<HeritagePaintScheme, 'createdAt' | 'isPurchased' | 'appliedToLocoId'>[] = [
-  {
-    id: "alpha_livery", // Stable ID for achievement rewards
-    name: "Alpha Livery",
-    description: "Exclusive paint scheme for alpha testers who completed 250 jobs",
-    primaryColor: "#9333ea", // Purple
-    secondaryColor: "#fbbf24", // Gold
-    accentColor: "#1e293b", // Dark slate
-    stripePattern: "custom",
-    purchaseCost: 0, // Free reward
-    pointsCost: 0, // Free reward
-    levelRequired: 1,
-  },
+  // Legacy catalog removed - users now create their own
+  // Keeping this as empty array for backward compatibility
+];
+
+// Legacy pre-made schemes (for reference only, not used anymore)
+const LEGACY_HERITAGE_SCHEMES = [
   {
     id: "heritage_blue_gold",
     name: "Heritage Blue & Gold",
