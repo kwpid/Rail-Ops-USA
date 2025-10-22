@@ -60,24 +60,70 @@ export const locomotiveSchema = z.object({
 // JOB SCHEMAS
 // ============================================================================
 
+export const carManifestSchema = z.object({
+  carType: z.string(), // e.g. "Boxcar", "Hopper", "Tank Car", "Gondola", "Intermodal"
+  content: z.string(), // what's in the car
+  count: z.number().int().positive(),
+  weight: z.number().positive(), // tons per car
+});
+
 export const jobSchema = z.object({
   id: z.string(),
-  jobId: z.string(), // e.g. "LCL-001"
+  jobId: z.string(), // e.g. "LCL-001", "YRD-005"
   tier: z.number().int().min(1).max(3), // 1=Local, 2=Mainline, 3=Special
+  jobType: z.enum(["local_freight", "yard_switching", "mainline_freight", "special_freight"]).default("local_freight"),
   origin: z.string(),
   destination: z.string(),
-  distance: z.number().positive(), // miles
-  freightType: z.string(),
+  distance: z.number().positive(), // miles (0 for yard switching)
+  freightType: z.string(), // e.g. "Coal", "Intermodal", "Grain", "Chemicals"
+  demandLevel: z.enum(["low", "medium", "high", "critical"]).default("medium"),
   carCount: z.number().int().positive(),
+  manifest: z.array(carManifestSchema), // detailed breakdown of cars
   hpRequired: z.number().int().positive(),
   payout: z.number().int().positive(),
-  timeHours: z.number().positive(),
+  timeMinutes: z.number().positive(), // changed from timeHours for more precision
   xpReward: z.number().int().positive(),
   status: z.enum(["available", "in_progress", "completed"]).default("available"),
   assignedLocos: z.array(z.string()).optional(), // array of loco IDs
   startedAt: z.number().optional(),
   completesAt: z.number().optional(),
+  progressPercent: z.number().min(0).max(100).optional(), // for UI display
+  generatedAt: z.number(), // when the job was created (for hourly refresh)
 });
+
+export type CarManifest = z.infer<typeof carManifestSchema>;
+export type Job = z.infer<typeof jobSchema>;
+
+// ============================================================================
+// SUPPLY & DEMAND SYSTEM
+// ============================================================================
+
+export const freightDemandSchema = z.object({
+  freightType: z.string(),
+  demandLevel: z.enum(["low", "medium", "high", "critical"]),
+  payoutMultiplier: z.number().positive(), // affects job payout
+  lastUpdated: z.number(),
+});
+
+export const marketDataSchema = z.object({
+  demands: z.array(freightDemandSchema),
+  lastRefreshed: z.number(),
+});
+
+export type FreightDemand = z.infer<typeof freightDemandSchema>;
+export type MarketData = z.infer<typeof marketDataSchema>;
+
+// Freight types and their base characteristics
+export const FREIGHT_TYPES = [
+  { type: "Coal", basePayoutPerMile: 85, baseDemand: "high", description: "Unit trains of coal from mines to power plants" },
+  { type: "Intermodal", basePayoutPerMile: 95, baseDemand: "high", description: "Container and trailer on flatcar traffic" },
+  { type: "Grain", basePayoutPerMile: 70, baseDemand: "medium", description: "Agricultural products in covered hoppers" },
+  { type: "Chemicals", basePayoutPerMile: 110, baseDemand: "medium", description: "Hazmat tank cars requiring special handling" },
+  { type: "Steel", basePayoutPerMile: 80, baseDemand: "medium", description: "Steel coils and plates in gondolas" },
+  { type: "Lumber", basePayoutPerMile: 65, baseDemand: "low", description: "Forest products in centerbeam flatcars" },
+  { type: "Automotive", basePayoutPerMile: 100, baseDemand: "medium", description: "Finished vehicles in autorack cars" },
+  { type: "Mixed Manifest", basePayoutPerMile: 75, baseDemand: "medium", description: "Various commodities in mixed train" },
+] as const;
 
 // ============================================================================
 // NEWS SCHEMAS
@@ -100,6 +146,7 @@ export const playerDataSchema = z.object({
   stats: playerStatsSchema,
   locomotives: z.array(locomotiveSchema).default([]),
   jobs: z.array(jobSchema).default([]),
+  marketData: marketDataSchema.optional(), // supply/demand tracking
 });
 
 // ============================================================================
@@ -110,7 +157,6 @@ export type Player = z.infer<typeof playerSchema>;
 export type Company = z.infer<typeof companySchema>;
 export type PlayerStats = z.infer<typeof playerStatsSchema>;
 export type Locomotive = z.infer<typeof locomotiveSchema>;
-export type Job = z.infer<typeof jobSchema>;
 export type NewsItem = z.infer<typeof newsItemSchema>;
 export type PlayerData = z.infer<typeof playerDataSchema>;
 

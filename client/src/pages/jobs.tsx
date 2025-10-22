@@ -8,49 +8,250 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { MapPin, Package, Zap, DollarSign, Clock, Star, Lock, ArrowRight } from "lucide-react";
-import type { Job } from "@shared/schema";
+import { MapPin, Package, Zap, DollarSign, Clock, Star, Lock, ArrowRight, TrendingUp, TrendingDown, Minus, PackageOpen } from "lucide-react";
+import { Progress } from "@/components/ui/progress";
+import type { Job, CarManifest } from "@shared/schema";
+import { FREIGHT_TYPES } from "@shared/schema";
 import { doc, updateDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { calculateLevel, getXpForNextLevel } from "@shared/schema";
 import { LevelUpNotification } from "@/components/level-up-notification";
 
-// Sample jobs generator
-const generateJobs = (tier: 1 | 2 | 3, baseCity: string): Job[] => {
-  const cities = ["Atlanta, GA", "Charlotte, NC", "Memphis, TN", "Nashville, TN", "Birmingham, AL"];
-  const freightTypes = [
-    { type: "Boxcar (General Goods)", cars: 6 },
-    { type: "Grain Hoppers", cars: 12 },
-    { type: "Coal Hoppers", cars: 20 },
-    { type: "Tank Cars (Chemicals)", cars: 8 },
-    { type: "Intermodal", cars: 15 },
-  ];
+const CAR_TYPES = [
+  { type: "Boxcar", contents: ["General Freight", "Packaged Goods", "Appliances", "Paper Products"] },
+  { type: "Covered Hopper", contents: ["Grain", "Wheat", "Corn", "Soybeans", "Flour", "Cement"] },
+  { type: "Open Hopper", contents: ["Coal", "Aggregate", "Scrap Metal", "Sand"] },
+  { type: "Tank Car", contents: ["Crude Oil", "Chemicals", "Liquid Fertilizer", "Corn Syrup"] },
+  { type: "Gondola", contents: ["Steel Coils", "Steel Plates", "Scrap Metal", "Lumber"] },
+  { type: "Flatcar", contents: ["Steel Beams", "Construction Equipment", "Lumber", "Pipes"] },
+  { type: "Intermodal", contents: ["Containers (Mixed)", "Containers (Consumer Goods)", "Trailers"] },
+  { type: "Autorack", contents: ["New Automobiles", "New Trucks", "New SUVs"] },
+];
 
-  const jobs: Job[] = [];
-  const jobCount = tier === 1 ? 6 : tier === 2 ? 4 : 3;
+const YARD_SWITCHING_TASKS = [
+  "Assemble outbound manifest freight",
+  "Break down incoming unit train",
+  "Sort mixed freight by destination",
+  "Spot cars at industrial sidings",
+  "Build unit coal train",
+  "Interchange with Class I railroad",
+  "Organize intermodal terminal",
+  "Service local industries",
+];
 
-  for (let i = 0; i < jobCount; i++) {
-    const freight = freightTypes[Math.floor(Math.random() * freightTypes.length)];
-    const distance = tier === 1 ? 20 + Math.random() * 50 : tier === 2 ? 80 + Math.random() * 120 : 200 + Math.random() * 300;
-    const hpPerCar = tier === 1 ? 200 : tier === 2 ? 250 : 300;
-    
-    jobs.push({
-      id: crypto.randomUUID(),
-      jobId: `${tier === 1 ? "LCL" : tier === 2 ? "MLF" : "SPF"}-${String(i + 1).padStart(3, "0")}`,
-      tier,
-      origin: baseCity,
-      destination: cities[Math.floor(Math.random() * cities.length)],
-      distance: Math.floor(distance),
-      freightType: freight.type,
-      carCount: freight.cars,
-      hpRequired: freight.cars * hpPerCar,
-      payout: Math.floor(distance * freight.cars * (tier === 1 ? 20 : tier === 2 ? 35 : 60)),
-      timeHours: Number((distance / 50).toFixed(1)),
-      xpReward: Math.floor(distance * (tier === 1 ? 5 : tier === 2 ? 10 : 20)),
-      status: "available",
+const generateManifest = (freightType: string, totalCars: number): CarManifest[] => {
+  const manifest: CarManifest[] = [];
+  
+  if (freightType === "Coal") {
+    manifest.push({
+      carType: "Open Hopper",
+      content: "Coal",
+      count: totalCars,
+      weight: 110,
     });
+  } else if (freightType === "Intermodal") {
+    const containers = Math.floor(totalCars * 0.7);
+    const trailers = totalCars - containers;
+    manifest.push({
+      carType: "Intermodal",
+      content: "Containers (Mixed)",
+      count: containers,
+      weight: 75,
+    });
+    if (trailers > 0) {
+      manifest.push({
+        carType: "Intermodal",
+        content: "Trailers",
+        count: trailers,
+        weight: 60,
+      });
+    }
+  } else if (freightType === "Grain") {
+    manifest.push({
+      carType: "Covered Hopper",
+      content: ["Corn", "Wheat", "Soybeans"][Math.floor(Math.random() * 3)],
+      count: totalCars,
+      weight: 100,
+    });
+  } else if (freightType === "Chemicals") {
+    manifest.push({
+      carType: "Tank Car",
+      content: "Hazardous Chemicals",
+      count: totalCars,
+      weight: 90,
+    });
+  } else if (freightType === "Automotive") {
+    manifest.push({
+      carType: "Autorack",
+      content: "New Automobiles",
+      count: totalCars,
+      weight: 70,
+    });
+  } else if (freightType === "Steel") {
+    manifest.push({
+      carType: "Gondola",
+      content: "Steel Coils",
+      count: totalCars,
+      weight: 120,
+    });
+  } else {
+    const carTypes = CAR_TYPES.filter(c => !["Intermodal", "Autorack"].includes(c.type));
+    const numTypes = Math.min(3, Math.max(1, Math.floor(totalCars / 3)));
+    let remainingCars = totalCars;
+    
+    for (let i = 0; i < numTypes && remainingCars > 0; i++) {
+      const carType = carTypes[Math.floor(Math.random() * carTypes.length)];
+      const count = i === numTypes - 1 ? remainingCars : Math.ceil(remainingCars / (numTypes - i));
+      const content = carType.contents[Math.floor(Math.random() * carType.contents.length)];
+      
+      manifest.push({
+        carType: carType.type,
+        content,
+        count,
+        weight: 80 + Math.random() * 40,
+      });
+      
+      remainingCars -= count;
+    }
   }
+  
+  return manifest;
+};
 
+const generateJobs = (tier: 1 | 2 | 3, playerCity: string, playerLevel: number): Job[] => {
+  const cities = ["Atlanta, GA", "Charlotte, NC", "Memphis, TN", "Nashville, TN", "Birmingham, AL", "Chattanooga, TN"];
+  const otherCities = cities.filter(c => c !== playerCity);
+  const jobs: Job[] = [];
+  
+  if (tier === 1) {
+    const numLocalFreight = 4;
+    const numYardSwitching = 2;
+    
+    for (let i = 0; i < numLocalFreight; i++) {
+      const nearbyCity = otherCities[Math.floor(Math.random() * Math.min(3, otherCities.length))];
+      const freightType = FREIGHT_TYPES[Math.floor(Math.random() * FREIGHT_TYPES.length)];
+      const distance = 15 + Math.random() * 35;
+      const carCount = 4 + Math.floor(Math.random() * 8);
+      const manifest = generateManifest(freightType.type, carCount);
+      const hpRequired = carCount * 150;
+      const timeMinutes = 8 + Math.random() * 7;
+      const basePayout = distance * carCount * 18;
+      
+      jobs.push({
+        id: crypto.randomUUID(),
+        jobId: `LCL-${String(i + 1).padStart(3, "0")}`,
+        tier: 1,
+        jobType: "local_freight",
+        origin: playerCity,
+        destination: nearbyCity,
+        distance: Math.floor(distance),
+        freightType: freightType.type,
+        demandLevel: "medium",
+        carCount,
+        manifest,
+        hpRequired,
+        payout: Math.floor(basePayout),
+        timeMinutes: Math.floor(timeMinutes),
+        xpReward: Math.floor(distance * 5),
+        status: "available",
+        generatedAt: Date.now(),
+      });
+    }
+    
+    for (let i = 0; i < numYardSwitching; i++) {
+      const task = YARD_SWITCHING_TASKS[Math.floor(Math.random() * YARD_SWITCHING_TASKS.length)];
+      const carCount = 8 + Math.floor(Math.random() * 12);
+      const manifest = generateManifest("Mixed Manifest", carCount);
+      const hpRequired = 1500;
+      const timeMinutes = 6 + Math.random() * 4;
+      const basePayout = carCount * 220;
+      
+      jobs.push({
+        id: crypto.randomUUID(),
+        jobId: `YRD-${String(i + 1).padStart(3, "0")}`,
+        tier: 1,
+        jobType: "yard_switching",
+        origin: `${playerCity} Yard`,
+        destination: `${playerCity} Yard`,
+        distance: 0,
+        freightType: task,
+        demandLevel: "medium",
+        carCount,
+        manifest,
+        hpRequired,
+        payout: Math.floor(basePayout),
+        timeMinutes: Math.floor(timeMinutes),
+        xpReward: 30 + Math.floor(carCount * 2),
+        status: "available",
+        generatedAt: Date.now(),
+      });
+    }
+  } else if (tier === 2) {
+    const jobCount = 4;
+    for (let i = 0; i < jobCount; i++) {
+      const destination = otherCities[Math.floor(Math.random() * otherCities.length)];
+      const freightType = FREIGHT_TYPES[Math.floor(Math.random() * FREIGHT_TYPES.length)];
+      const distance = 80 + Math.random() * 120;
+      const carCount = 15 + Math.floor(Math.random() * 25);
+      const manifest = generateManifest(freightType.type, carCount);
+      const hpRequired = carCount * 200;
+      const timeMinutes = 45 + Math.random() * 45;
+      const basePayout = distance * carCount * 30;
+      
+      jobs.push({
+        id: crypto.randomUUID(),
+        jobId: `MLF-${String(i + 1).padStart(3, "0")}`,
+        tier: 2,
+        jobType: "mainline_freight",
+        origin: playerCity,
+        destination,
+        distance: Math.floor(distance),
+        freightType: freightType.type,
+        demandLevel: "medium",
+        carCount,
+        manifest,
+        hpRequired,
+        payout: Math.floor(basePayout),
+        timeMinutes: Math.floor(timeMinutes),
+        xpReward: Math.floor(distance * 10),
+        status: "available",
+        generatedAt: Date.now(),
+      });
+    }
+  } else if (tier === 3) {
+    const jobCount = 3;
+    for (let i = 0; i < jobCount; i++) {
+      const destination = otherCities[Math.floor(Math.random() * otherCities.length)];
+      const freightType = ["Coal", "Intermodal", "Automotive"][Math.floor(Math.random() * 3)];
+      const distance = 200 + Math.random() * 300;
+      const carCount = 40 + Math.floor(Math.random() * 80);
+      const manifest = generateManifest(freightType, carCount);
+      const hpRequired = carCount * 250;
+      const timeMinutes = 120 + Math.random() * 180;
+      const basePayout = distance * carCount * 55;
+      
+      jobs.push({
+        id: crypto.randomUUID(),
+        jobId: `SPF-${String(i + 1).padStart(3, "0")}`,
+        tier: 3,
+        jobType: "special_freight",
+        origin: playerCity,
+        destination,
+        distance: Math.floor(distance),
+        freightType,
+        demandLevel: "high",
+        carCount,
+        manifest,
+        hpRequired,
+        payout: Math.floor(basePayout),
+        timeMinutes: Math.floor(timeMinutes),
+        xpReward: Math.floor(distance * 20),
+        status: "available",
+        generatedAt: Date.now(),
+      });
+    }
+  }
+  
   return jobs;
 };
 
@@ -68,20 +269,18 @@ export default function Jobs() {
   const locomotives = playerData.locomotives;
   const company = playerData.company!;
 
-  // Generate jobs if none exist - persist to Firestore
   useEffect(() => {
     const initializeJobs = async () => {
       if (playerData.jobs.length === 0) {
-        const tier1 = generateJobs(1, company.city);
-        const tier2 = stats.level >= 10 ? generateJobs(2, company.city) : [];
-        const tier3 = stats.level >= 50 ? generateJobs(3, company.city) : [];
+        const tier1 = generateJobs(1, company.city, stats.level);
+        const tier2 = stats.level >= 10 ? generateJobs(2, company.city, stats.level) : [];
+        const tier3 = stats.level >= 50 ? generateJobs(3, company.city, stats.level) : [];
         
         try {
           const playerRef = doc(db, "players", user.uid);
           await updateDoc(playerRef, {
             jobs: [...tier1, ...tier2, ...tier3],
           });
-          // onSnapshot in AuthContext will automatically update playerData
         } catch (error) {
           console.error("Error initializing jobs:", error);
         }
@@ -113,9 +312,8 @@ export default function Jobs() {
     try {
       const playerRef = doc(db, "players", user.uid);
       const now = Date.now();
-      const completionTime = now + selectedJob.timeHours * 3600 * 1000;
+      const completionTime = now + selectedJob.timeMinutes * 60 * 1000;
 
-      // Update job and locomotives
       const updatedJobs = playerData.jobs.map((j) =>
         j.id === selectedJob.id
           ? { ...j, status: "in_progress" as const, assignedLocos: selectedLocos, startedAt: now, completesAt: completionTime }
@@ -140,7 +338,6 @@ export default function Jobs() {
         description: `${selectedLocos.length} locomotive(s) assigned to ${selectedJob.jobId}`,
       });
 
-      // Auto-complete after time (for demo purposes, we'll complete immediately)
       setTimeout(async () => {
         await completeJob(selectedJob.id);
       }, 2000);
@@ -167,7 +364,6 @@ export default function Jobs() {
       const oldLevel = stats.level;
       const newLevel = calculateLevel(newXp);
 
-      // Update job to completed, free up locos, add cash and XP
       const updatedJobs = playerData.jobs.map((j) =>
         j.id === jobId ? { ...j, status: "completed" as const } : j
       );
@@ -191,7 +387,6 @@ export default function Jobs() {
         description: `Earned $${job.payout.toLocaleString()} and ${job.xpReward} XP`,
       });
 
-      // Check for level up
       if (newLevel > oldLevel) {
         const unlocks = [];
         if (newLevel === 10) unlocks.push("Mainline Freight Jobs");
@@ -203,24 +398,106 @@ export default function Jobs() {
     }
   };
 
-  const tier1Jobs = playerData.jobs.filter((j) => j.tier === 1);
-  const tier2Jobs = playerData.jobs.filter((j) => j.tier === 2);
-  const tier3Jobs = playerData.jobs.filter((j) => j.tier === 3);
+  const availableJobs = playerData.jobs.filter((j) => j.status === "available");
+  const currentJobs = playerData.jobs.filter((j) => j.status === "in_progress");
+  const tier1Jobs = availableJobs.filter((j) => j.tier === 1);
+  const tier2Jobs = availableJobs.filter((j) => j.tier === 2);
+  const tier3Jobs = availableJobs.filter((j) => j.tier === 3);
+
+  const getDemandIcon = (level: string) => {
+    if (level === "high" || level === "critical") return <TrendingUp className="w-3 h-3" />;
+    if (level === "low") return <TrendingDown className="w-3 h-3" />;
+    return <Minus className="w-3 h-3" />;
+  };
+
+  const getDemandColor = (level: string) => {
+    if (level === "critical") return "text-destructive";
+    if (level === "high") return "text-chart-3";
+    if (level === "medium") return "text-chart-2";
+    return "text-muted-foreground";
+  };
+
+  const CurrentJobCard = ({ job }: { job: Job }) => {
+    const now = Date.now();
+    const progress = job.completesAt && job.startedAt
+      ? Math.min(100, ((now - job.startedAt) / (job.completesAt - job.startedAt)) * 100)
+      : 0;
+    const timeRemaining = job.completesAt ? Math.max(0, job.completesAt - now) : 0;
+    const minutesRemaining = Math.ceil(timeRemaining / 60000);
+
+    return (
+      <Card className="hover-elevate">
+        <CardHeader>
+          <div className="flex items-start justify-between gap-2">
+            <div>
+              <CardTitle className="font-mono text-lg">{job.jobId}</CardTitle>
+              <CardDescription>{job.freightType}</CardDescription>
+            </div>
+            <Badge variant="secondary">In Progress</Badge>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-center gap-2 text-sm">
+            <MapPin className="w-4 h-4 text-muted-foreground" />
+            <span className="font-medium">{job.origin}</span>
+            <ArrowRight className="w-4 h-4 text-muted-foreground" />
+            <span className="font-medium">{job.destination}</span>
+          </div>
+
+          <div>
+            <div className="flex items-center justify-between text-sm mb-2">
+              <span className="text-muted-foreground">Progress</span>
+              <span className="font-medium">{minutesRemaining} min remaining</span>
+            </div>
+            <Progress value={progress} className="h-2" />
+          </div>
+
+          <div className="grid grid-cols-2 gap-2 text-sm">
+            <div className="flex items-center gap-1">
+              <Package className="w-3 h-3 text-muted-foreground" />
+              <span>{job.carCount} cars</span>
+            </div>
+            <div className="flex items-center gap-1">
+              <Clock className="w-3 h-3 text-muted-foreground" />
+              <span>{job.timeMinutes} min</span>
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between pt-2 border-t">
+            <div className="flex items-center gap-1 text-chart-3 font-semibold">
+              <DollarSign className="w-4 h-4" />
+              <span>${job.payout.toLocaleString()}</span>
+            </div>
+            <div className="flex items-center gap-1 text-chart-4 font-semibold">
+              <Star className="w-4 h-4" />
+              <span>{job.xpReward} XP</span>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  };
 
   const JobCard = ({ job }: { job: Job }) => (
     <Card
-      className={`hover-elevate cursor-pointer ${job.status !== "available" ? "opacity-50" : ""}`}
-      onClick={() => job.status === "available" && setSelectedJob(job)}
+      className="hover-elevate cursor-pointer"
+      onClick={() => setSelectedJob(job)}
       data-testid={`card-job-${job.id}`}
     >
       <CardHeader>
         <div className="flex items-start justify-between gap-2">
           <div>
             <CardTitle className="font-mono text-lg">{job.jobId}</CardTitle>
-            <CardDescription>{job.freightType}</CardDescription>
+            <CardDescription className="flex items-center gap-2">
+              {job.freightType}
+              <span className={`flex items-center gap-1 text-xs ${getDemandColor(job.demandLevel)}`}>
+                {getDemandIcon(job.demandLevel)}
+                {job.demandLevel}
+              </span>
+            </CardDescription>
           </div>
-          <Badge variant={job.status === "available" ? "default" : job.status === "in_progress" ? "secondary" : "outline"}>
-            {job.status}
+          <Badge variant={job.jobType === "yard_switching" ? "outline" : "default"}>
+            {job.jobType === "yard_switching" ? "Yard" : "Freight"}
           </Badge>
         </div>
       </CardHeader>
@@ -228,8 +505,12 @@ export default function Jobs() {
         <div className="flex items-center gap-2 text-sm">
           <MapPin className="w-4 h-4 text-muted-foreground" />
           <span className="font-medium">{job.origin}</span>
-          <ArrowRight className="w-4 h-4 text-muted-foreground" />
-          <span className="font-medium">{job.destination}</span>
+          {job.destination !== job.origin && (
+            <>
+              <ArrowRight className="w-4 h-4 text-muted-foreground" />
+              <span className="font-medium">{job.destination}</span>
+            </>
+          )}
         </div>
 
         <div className="grid grid-cols-2 gap-2 text-sm">
@@ -243,12 +524,14 @@ export default function Jobs() {
           </div>
           <div className="flex items-center gap-1">
             <Clock className="w-3 h-3 text-muted-foreground" />
-            <span>{job.timeHours}h</span>
+            <span>{job.timeMinutes} min</span>
           </div>
-          <div className="flex items-center gap-1">
-            <MapPin className="w-3 h-3 text-muted-foreground" />
-            <span>{job.distance} mi</span>
-          </div>
+          {job.distance > 0 && (
+            <div className="flex items-center gap-1">
+              <MapPin className="w-3 h-3 text-muted-foreground" />
+              <span>{job.distance} mi</span>
+            </div>
+          )}
         </div>
 
         <div className="flex items-center justify-between pt-2 border-t">
@@ -275,8 +558,11 @@ export default function Jobs() {
           </p>
         </div>
 
-        <Tabs defaultValue="tier1">
+        <Tabs defaultValue="current">
           <TabsList>
+            <TabsTrigger value="current" data-testid="tab-current">
+              Current Jobs ({currentJobs.length})
+            </TabsTrigger>
             <TabsTrigger value="tier1" data-testid="tab-tier1">
               Local Freight
             </TabsTrigger>
@@ -289,6 +575,24 @@ export default function Jobs() {
               {stats.level < 50 && <Lock className="w-3 h-3 ml-1" />}
             </TabsTrigger>
           </TabsList>
+
+          <TabsContent value="current" className="space-y-4">
+            {currentJobs.length === 0 ? (
+              <Card className="p-12 text-center">
+                <PackageOpen className="w-16 h-16 mx-auto mb-4 text-muted-foreground" />
+                <h3 className="text-lg font-semibold mb-2">No Active Jobs</h3>
+                <p className="text-muted-foreground">
+                  Assign locomotives to jobs from the other tabs to get started
+                </p>
+              </Card>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {currentJobs.map((job) => (
+                  <CurrentJobCard key={job.id} job={job} />
+                ))}
+              </div>
+            )}
+          </TabsContent>
 
           <TabsContent value="tier1" className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -316,16 +620,20 @@ export default function Jobs() {
         </Tabs>
       </div>
 
-      {/* Assign Locomotives Dialog */}
       <Dialog open={!!selectedJob} onOpenChange={(open) => !open && setSelectedJob(null)}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           {selectedJob && (
             <>
               <DialogHeader>
                 <DialogTitle className="text-2xl font-accent font-mono">
                   {selectedJob.jobId}
                 </DialogTitle>
-                <DialogDescription>{selectedJob.freightType}</DialogDescription>
+                <DialogDescription className="flex items-center gap-2">
+                  {selectedJob.freightType}
+                  <Badge variant={selectedJob.jobType === "yard_switching" ? "outline" : "default"}>
+                    {selectedJob.jobType === "yard_switching" ? "Yard Switching" : "Freight"}
+                  </Badge>
+                </DialogDescription>
               </DialogHeader>
 
               <div className="space-y-4">
@@ -334,13 +642,17 @@ export default function Jobs() {
                     <div className="text-sm text-muted-foreground">Route</div>
                     <div className="font-medium flex items-center gap-1">
                       <span>{selectedJob.origin}</span>
-                      <ArrowRight className="w-4 h-4" />
-                      <span>{selectedJob.destination}</span>
+                      {selectedJob.destination !== selectedJob.origin && (
+                        <>
+                          <ArrowRight className="w-4 h-4" />
+                          <span>{selectedJob.destination}</span>
+                        </>
+                      )}
                     </div>
                   </div>
                   <div>
                     <div className="text-sm text-muted-foreground">Distance</div>
-                    <div className="font-semibold">{selectedJob.distance} miles</div>
+                    <div className="font-semibold">{selectedJob.distance > 0 ? `${selectedJob.distance} miles` : "Yard Work"}</div>
                   </div>
                   <div>
                     <div className="text-sm text-muted-foreground">Car Count</div>
@@ -348,7 +660,25 @@ export default function Jobs() {
                   </div>
                   <div>
                     <div className="text-sm text-muted-foreground">Time</div>
-                    <div className="font-semibold">{selectedJob.timeHours} hours</div>
+                    <div className="font-semibold">{selectedJob.timeMinutes} minutes</div>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label className="text-base font-semibold">Manifest Details</Label>
+                  <div className="space-y-2">
+                    {selectedJob.manifest.map((item, idx) => (
+                      <div key={idx} className="flex items-center justify-between p-3 bg-muted/50 rounded-md">
+                        <div>
+                          <div className="font-medium">{item.carType}</div>
+                          <div className="text-sm text-muted-foreground">{item.content}</div>
+                        </div>
+                        <div className="text-right">
+                          <div className="font-semibold">{item.count} cars</div>
+                          <div className="text-sm text-muted-foreground">{item.weight.toFixed(0)} tons/car</div>
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 </div>
 
@@ -434,7 +764,6 @@ export default function Jobs() {
         </DialogContent>
       </Dialog>
 
-      {/* Level Up Notification */}
       {levelUpInfo && (
         <LevelUpNotification
           level={levelUpInfo.level}
