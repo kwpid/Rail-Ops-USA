@@ -8,7 +8,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { MapPin, Package, Zap, DollarSign, Clock, Star, Lock, ArrowRight, TrendingUp, TrendingDown, Minus, PackageOpen } from "lucide-react";
+import { MapPin, Package, Zap, DollarSign, Clock, Star, Lock, ArrowRight, TrendingUp, TrendingDown, Minus, PackageOpen, RefreshCw } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
 import type { Job, CarManifest } from "@shared/schema";
 import { FREIGHT_TYPES } from "@shared/schema";
@@ -279,6 +279,8 @@ export default function Jobs() {
   const [selectedLocos, setSelectedLocos] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [levelUpInfo, setLevelUpInfo] = useState<{ level: number; unlocks: string[] } | null>(null);
+  const [timeUntilRefresh, setTimeUntilRefresh] = useState<string>("");
+  const [refreshing, setRefreshing] = useState(false);
 
   if (!playerData || !user) return null;
 
@@ -360,6 +362,65 @@ export default function Jobs() {
     
     return () => clearInterval(interval);
   }, [playerData.jobs, company.city, stats.level, user.uid, toast]);
+
+  // Timer to show when jobs will refresh
+  useEffect(() => {
+    const updateTimer = () => {
+      const now = new Date();
+      const minutes = now.getMinutes();
+      const seconds = now.getSeconds();
+      
+      // Calculate time until next refresh (XX:00 or XX:30)
+      let minutesUntilRefresh;
+      if (minutes < 30) {
+        minutesUntilRefresh = 29 - minutes;
+      } else {
+        minutesUntilRefresh = 59 - minutes;
+      }
+      const secondsUntilRefresh = 60 - seconds;
+      
+      setTimeUntilRefresh(`${minutesUntilRefresh}m ${secondsUntilRefresh}s`);
+    };
+    
+    updateTimer();
+    const interval = setInterval(updateTimer, 1000);
+    
+    return () => clearInterval(interval);
+  }, []);
+
+  // Manual refresh function
+  const handleManualRefresh = async () => {
+    if (refreshing) return;
+    
+    setRefreshing(true);
+    try {
+      const ongoingJobs = playerData.jobs.filter(j => j.status === "in_progress");
+      const tier1 = generateJobs(1, company.city, stats.level);
+      const tier2 = stats.level >= 10 ? generateJobs(2, company.city, stats.level) : [];
+      const tier3 = stats.level >= 50 ? generateJobs(3, company.city, stats.level) : [];
+      
+      const playerRef = doc(db, "players", user.uid);
+      await updateDoc(playerRef, {
+        jobs: [...ongoingJobs, ...tier1, ...tier2, ...tier3],
+      });
+      
+      await refreshPlayerData();
+      
+      toast({
+        title: "Jobs Refreshed",
+        description: "New freight opportunities are now available",
+      });
+    } catch (error) {
+      console.error("Error refreshing jobs:", error);
+      toast({
+        title: "Error",
+        description: "Failed to refresh jobs",
+        variant: "destructive",
+      });
+    } finally {
+      setRefreshing(false);
+    }
+  };
 
   const availableLocos = locomotives.filter((l) => l.status === "available");
   const totalSelectedHP = selectedLocos.reduce((sum, id) => {
@@ -622,11 +683,28 @@ export default function Jobs() {
   return (
     <>
       <div className="max-w-7xl mx-auto p-6 space-y-6">
-        <div>
-          <h1 className="text-3xl font-accent font-bold">Job Board</h1>
-          <p className="text-muted-foreground">
-            Available freight jobs from {company.city}
-          </p>
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-accent font-bold">Job Board</h1>
+            <p className="text-muted-foreground">
+              Available freight jobs from {company.city}
+            </p>
+          </div>
+          <div className="flex items-center gap-3">
+            <div className="text-right">
+              <div className="text-sm text-muted-foreground">Next Refresh</div>
+              <div className="text-lg font-semibold font-mono">{timeUntilRefresh}</div>
+            </div>
+            <Button 
+              onClick={handleManualRefresh} 
+              disabled={refreshing}
+              variant="outline"
+              size="sm"
+            >
+              <RefreshCw className={`w-4 h-4 mr-2 ${refreshing ? 'animate-spin' : ''}`} />
+              Refresh Now
+            </Button>
+          </div>
         </div>
 
         <Tabs defaultValue="current">
@@ -738,7 +816,7 @@ export default function Jobs() {
                 <div className="space-y-2">
                   <Label className="text-base font-semibold">Manifest Details</Label>
                   <div className="space-y-2">
-                    {selectedJob.manifest.map((item, idx) => (
+                    {(selectedJob.manifest || []).map((item, idx) => (
                       <div key={idx} className="flex items-center justify-between p-3 bg-muted/50 rounded-md">
                         <div>
                           <div className="font-medium">{item.carType}</div>
