@@ -121,6 +121,23 @@ const generateManifest = (freightType: string, totalCars: number): CarManifest[]
 const generateJobs = (tier: 1 | 2 | 3, playerCity: string, playerLevel: number): Job[] => {
   const cities = ["Atlanta, GA", "Charlotte, NC", "Memphis, TN", "Nashville, TN", "Birmingham, AL", "Chattanooga, TN"];
   const otherCities = cities.filter(c => c !== playerCity);
+  
+  // Local destinations within the same city
+  const localDestinations = [
+    "Industrial Park",
+    "East Yard",
+    "West Terminal",
+    "Port Facility",
+    "North Industrial",
+    "South Distribution Center",
+    "Manufacturing District",
+    "Intermodal Terminal",
+    "Grain Elevator",
+    "Steel Mill",
+    "Chemical Plant",
+    "Auto Assembly Plant",
+  ];
+  
   const jobs: Job[] = [];
   
   if (tier === 1) {
@@ -128,22 +145,22 @@ const generateJobs = (tier: 1 | 2 | 3, playerCity: string, playerLevel: number):
     const numYardSwitching = 2;
     
     for (let i = 0; i < numLocalFreight; i++) {
-      const nearbyCity = otherCities[Math.floor(Math.random() * Math.min(3, otherCities.length))];
+      const destination = localDestinations[Math.floor(Math.random() * localDestinations.length)];
       const freightType = FREIGHT_TYPES[Math.floor(Math.random() * FREIGHT_TYPES.length)];
-      const distance = 15 + Math.random() * 35;
+      const distance = 5 + Math.random() * 11; // Short local distances (5-15 miles after floor)
       const carCount = 4 + Math.floor(Math.random() * 8);
       const manifest = generateManifest(freightType.type, carCount);
       const hpRequired = carCount * 150;
       const timeMinutes = 8 + Math.random() * 7;
-      const basePayout = distance * carCount * 18;
+      const basePayout = distance * carCount * 25; // Higher rate per mile for local
       
       jobs.push({
         id: crypto.randomUUID(),
         jobId: `LCL-${String(i + 1).padStart(3, "0")}`,
         tier: 1,
         jobType: "local_freight",
-        origin: playerCity,
-        destination: nearbyCity,
+        origin: `${playerCity} Yard`,
+        destination: `${playerCity} ${destination}`,
         distance: Math.floor(distance),
         freightType: freightType.type,
         demandLevel: "medium",
@@ -289,6 +306,60 @@ export default function Jobs() {
 
     initializeJobs();
   }, [playerData.jobs.length, company.city, stats.level, user.uid]);
+
+  // Auto-refresh jobs every 30 minutes (at XX:00 and XX:30)
+  useEffect(() => {
+    const checkAndRefreshJobs = async () => {
+      const now = new Date();
+      const minutes = now.getMinutes();
+      
+      // Only refresh at exactly XX:00 or XX:30
+      if (minutes !== 0 && minutes !== 30) return;
+      
+      // Check if we need to refresh (jobs older than 30 minutes)
+      const oldestAvailableJob = playerData.jobs
+        .filter(j => j.status === "available")
+        .reduce((oldest, job) => {
+          return !oldest || (job.generatedAt || 0) < (oldest.generatedAt || 0) ? job : oldest;
+        }, null as Job | null);
+      
+      if (!oldestAvailableJob) return;
+      
+      const jobAge = Date.now() - (oldestAvailableJob.generatedAt || 0);
+      const thirtyMinutes = 30 * 60 * 1000;
+      
+      // If oldest job is less than 29 minutes old, don't refresh yet
+      if (jobAge < (29 * 60 * 1000)) return;
+      
+      // Refresh jobs - keep ongoing jobs, generate new available jobs
+      const ongoingJobs = playerData.jobs.filter(j => j.status === "in_progress");
+      const tier1 = generateJobs(1, company.city, stats.level);
+      const tier2 = stats.level >= 10 ? generateJobs(2, company.city, stats.level) : [];
+      const tier3 = stats.level >= 50 ? generateJobs(3, company.city, stats.level) : [];
+      
+      try {
+        const playerRef = doc(db, "players", user.uid);
+        await updateDoc(playerRef, {
+          jobs: [...ongoingJobs, ...tier1, ...tier2, ...tier3],
+        });
+        
+        toast({
+          title: "Jobs Refreshed",
+          description: "New freight opportunities are now available",
+        });
+      } catch (error) {
+        console.error("Error refreshing jobs:", error);
+      }
+    };
+
+    // Check every minute
+    const interval = setInterval(checkAndRefreshJobs, 60 * 1000);
+    
+    // Also check immediately on mount
+    checkAndRefreshJobs();
+    
+    return () => clearInterval(interval);
+  }, [playerData.jobs, company.city, stats.level, user.uid, toast]);
 
   const availableLocos = locomotives.filter((l) => l.status === "available");
   const totalSelectedHP = selectedLocos.reduce((sum, id) => {
