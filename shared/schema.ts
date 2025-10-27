@@ -42,7 +42,7 @@ export const companySchema = z.object({
 });
 
 export const playerStatsSchema = z.object({
-  cash: z.number().default(500000),
+  cash: z.number().default(1500000),
   xp: z.number().default(0),
   level: z.number().default(1),
   nextLocoId: z.number().default(2), // starts at 2 since starter loco is #0001
@@ -163,6 +163,7 @@ export const achievementSchema = z.object({
   rewards: z.object({
     cash: z.number().int().default(0),
     points: z.number().int().default(0),
+    xp: z.number().int().default(0),
   }),
   expiresAt: z.number().optional(), // For weekly and event achievements
   createdAt: z.number(),
