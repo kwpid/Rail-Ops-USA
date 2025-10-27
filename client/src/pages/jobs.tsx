@@ -557,10 +557,73 @@ export default function Jobs() {
           return l;
         });
 
+        // Update achievement progress based on job completion
+        const achievementCash = (currentData.stats?.cash || 0) + job.payout;
+        const achievementLevel = newLevel;
+        const achievementLocosOwned = (currentData.locomotives || []).length;
+        
+        const updatedAchievements = (currentData.achievements || []).map((a: any) => {
+          // Skip already completed achievements
+          if (a.isCompleted) return a;
+          
+          let newProgress = a.currentProgress;
+          
+          // Increment-based achievements (count jobs completed)
+          if (a.requirement === "total_jobs_completed" || a.requirement === "complete_total_jobs") {
+            newProgress = a.currentProgress + 1;
+          }
+          // Job type specific achievements
+          else if (a.requirement === "complete_local_freight_jobs" && job.jobType === "local_freight") {
+            newProgress = a.currentProgress + 1;
+          }
+          else if (a.requirement === "complete_yard_switching_jobs" && job.jobType === "yard_switching") {
+            newProgress = a.currentProgress + 1;
+          }
+          else if (a.requirement === "complete_mainline_jobs" && job.jobType === "mainline_freight") {
+            newProgress = a.currentProgress + 1;
+          }
+          else if (a.requirement === "complete_mainline_freight_jobs" && job.jobType === "mainline_freight") {
+            newProgress = a.currentProgress + 1;
+          }
+          // Freight type specific achievements
+          else if (a.requirement === "complete_intermodal_jobs" && job.freightType === "Intermodal") {
+            newProgress = a.currentProgress + 1;
+          }
+          else if (a.requirement === "complete_coal_jobs" && job.freightType === "Coal") {
+            newProgress = a.currentProgress + 1;
+          }
+          else if (a.requirement === "complete_chemical_jobs" && job.freightType === "Chemicals") {
+            newProgress = a.currentProgress + 1;
+          }
+          else if (a.requirement === "complete_grain_jobs" && job.freightType === "Grain") {
+            newProgress = a.currentProgress + 1;
+          }
+          // Distance tracking
+          else if (a.requirement === "complete_miles_total") {
+            newProgress = a.currentProgress + job.distance;
+          }
+          else if (a.requirement === "total_miles_traveled") {
+            newProgress = a.currentProgress + job.distance;
+          }
+          // Value-based achievements (current state, not incremental)
+          else if (a.requirement === "cash_balance") {
+            newProgress = achievementCash;
+          }
+          else if (a.requirement === "player_level") {
+            newProgress = achievementLevel;
+          }
+          else if (a.requirement === "locomotives_owned") {
+            newProgress = achievementLocosOwned;
+          }
+          
+          return { ...a, currentProgress: newProgress };
+        });
+
         // Update with increments for cash/xp and calculated level
         transaction.update(playerRef, {
           jobs: updatedJobs,
           locomotives: updatedLocos,
+          achievements: updatedAchievements,
           "stats.cash": increment(job.payout),
           "stats.xp": increment(job.xpReward),
           "stats.level": newLevel,

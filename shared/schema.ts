@@ -1442,7 +1442,7 @@ export function generateEventAchievements(): Achievement[] {
     {
       type: "event",
       title: "ALPHA CHALLENGE",
-      description: "Complete 250 Total Jobs during alpha testing to earn the exclusive Alpha Livery!",
+      description: "Complete 250 Total Jobs during alpha testing to earn massive rewards!",
       requirement: "total_jobs_completed",
       targetValue: 250,
       currentProgress: 0,
