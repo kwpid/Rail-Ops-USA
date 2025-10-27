@@ -295,9 +295,17 @@ export const loanerTrainSchema = z.object({
     primaryColor: z.string(),
     secondaryColor: z.string(),
   }),
+  stock: z.number().int().min(0).default(1), // How many of this specific loaner train are available (always 1)
 });
 
 export type LoanerTrain = z.infer<typeof loanerTrainSchema>;
+
+export const dealershipStockSchema = z.object({
+  model: z.string(), // Locomotive model (matches catalog item model)
+  stock: z.number().int().min(0).max(17), // Current stock available (0-17)
+});
+
+export type DealershipStock = z.infer<typeof dealershipStockSchema>;
 
 export const playerDataSchema = z.object({
   player: playerSchema,
@@ -312,6 +320,7 @@ export const playerDataSchema = z.object({
   weeklyAchievementsRefreshAt: z.number().optional(), // Timestamp for next weekly achievements refresh
   loanerTrains: z.array(loanerTrainSchema).default([]), // Dynamic used locomotive marketplace
   loanerTrainsRefreshAt: z.number().optional(), // Timestamp for next loaner refresh (synced with jobs)
+  dealershipStock: z.array(dealershipStockSchema).default([]), // Main dealership stock levels (0-17 per model)
 });
 
 // ============================================================================
@@ -1051,11 +1060,20 @@ export function generateLoanerTrainMarket(count?: number): LoanerTrain[] {
   for (let i = 0; i < numTrains && availableCatalog.length > 0; i++) {
     const randomIndex = Math.floor(Math.random() * availableCatalog.length);
     const catalogItem = availableCatalog.splice(randomIndex, 1)[0];
-    loanerTrains.push(generateLoanerTrain(catalogItem));
+    const loaner = generateLoanerTrain(catalogItem);
+    loanerTrains.push({ ...loaner, stock: 1 });
   }
   
   // Sort by price (cheapest first)
   return loanerTrains.sort((a, b) => a.usedPrice - b.usedPrice);
+}
+
+// Generate dealership stock for all locomotives (0-17 stock per model)
+export function generateDealershipStock(): DealershipStock[] {
+  return LOCOMOTIVE_CATALOG.map(catalogItem => ({
+    model: catalogItem.model,
+    stock: Math.floor(Math.random() * 18), // Random stock between 0-17
+  }));
 }
 
 // ============================================================================
