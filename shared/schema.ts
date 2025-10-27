@@ -1076,7 +1076,7 @@ export function generateWeeklyAchievements(): Achievement[] {
       targetValue: 5,
       currentProgress: 0,
       isCompleted: false,
-      rewards: { cash: 7500, points: 5 },
+      rewards: { cash: 7500, points: 5, xp: 500 },
       expiresAt: nextFriday,
     },
     {
@@ -1087,7 +1087,7 @@ export function generateWeeklyAchievements(): Achievement[] {
       targetValue: 15,
       currentProgress: 0,
       isCompleted: false,
-      rewards: { cash: 10000, points: 0 },
+      rewards: { cash: 10000, points: 0, xp: 1000 },
       expiresAt: nextFriday,
     },
     {
@@ -1098,7 +1098,7 @@ export function generateWeeklyAchievements(): Achievement[] {
       targetValue: 5,
       currentProgress: 0,
       isCompleted: false,
-      rewards: { cash: 15000, points: 0 },
+      rewards: { cash: 15000, points: 0, xp: 800 },
       expiresAt: nextFriday,
     },
     {
@@ -1109,7 +1109,7 @@ export function generateWeeklyAchievements(): Achievement[] {
       targetValue: 3,
       currentProgress: 0,
       isCompleted: false,
-      rewards: { cash: 8000, points: 3 },
+      rewards: { cash: 8000, points: 3, xp: 0 },
       expiresAt: nextFriday,
     },
     {
@@ -1120,7 +1120,7 @@ export function generateWeeklyAchievements(): Achievement[] {
       targetValue: 2,
       currentProgress: 0,
       isCompleted: false,
-      rewards: { cash: 12000, points: 5 },
+      rewards: { cash: 12000, points: 5, xp: 600 },
       expiresAt: nextFriday,
     },
     {
@@ -1131,7 +1131,7 @@ export function generateWeeklyAchievements(): Achievement[] {
       targetValue: 10,
       currentProgress: 0,
       isCompleted: false,
-      rewards: { cash: 20000, points: 10 },
+      rewards: { cash: 20000, points: 10, xp: 1500 },
       expiresAt: nextFriday,
     },
     {
@@ -1142,7 +1142,7 @@ export function generateWeeklyAchievements(): Achievement[] {
       targetValue: 500,
       currentProgress: 0,
       isCompleted: false,
-      rewards: { cash: 15000, points: 8 },
+      rewards: { cash: 15000, points: 8, xp: 0 },
       expiresAt: nextFriday,
     },
     {
@@ -1153,7 +1153,7 @@ export function generateWeeklyAchievements(): Achievement[] {
       targetValue: 4,
       currentProgress: 0,
       isCompleted: false,
-      rewards: { cash: 9000, points: 4 },
+      rewards: { cash: 9000, points: 4, xp: 400 },
       expiresAt: nextFriday,
     },
     {
@@ -1164,7 +1164,7 @@ export function generateWeeklyAchievements(): Achievement[] {
       targetValue: 8,
       currentProgress: 0,
       isCompleted: false,
-      rewards: { cash: 6000, points: 3 },
+      rewards: { cash: 6000, points: 3, xp: 0 },
       expiresAt: nextFriday,
     },
     {
@@ -1175,7 +1175,7 @@ export function generateWeeklyAchievements(): Achievement[] {
       targetValue: 25,
       currentProgress: 0,
       isCompleted: false,
-      rewards: { cash: 50000, points: 25 },
+      rewards: { cash: 50000, points: 25, xp: 2500 },
       expiresAt: nextFriday,
     },
   ];
@@ -1200,7 +1200,7 @@ export function generateCareerAchievements(): Achievement[] {
       targetValue: 1,
       currentProgress: 0,
       isCompleted: false,
-      rewards: { cash: 5000, points: 5 },
+      rewards: { cash: 5000, points: 5, xp: 500 },
     },
     {
       type: "career",
@@ -1210,7 +1210,7 @@ export function generateCareerAchievements(): Achievement[] {
       targetValue: 100000,
       currentProgress: 0,
       isCompleted: false,
-      rewards: { cash: 0, points: 10 },
+      rewards: { cash: 0, points: 10, xp: 1000 },
     },
     {
       type: "career",
@@ -1220,7 +1220,7 @@ export function generateCareerAchievements(): Achievement[] {
       targetValue: 1000000,
       currentProgress: 0,
       isCompleted: false,
-      rewards: { cash: 0, points: 50 },
+      rewards: { cash: 0, points: 50, xp: 5000 },
     },
     {
       type: "career",
@@ -1230,7 +1230,7 @@ export function generateCareerAchievements(): Achievement[] {
       targetValue: 10000000,
       currentProgress: 0,
       isCompleted: false,
-      rewards: { cash: 0, points: 250 },
+      rewards: { cash: 0, points: 250, xp: 10000 },
     },
     {
       type: "career",
@@ -1240,7 +1240,7 @@ export function generateCareerAchievements(): Achievement[] {
       targetValue: 100,
       currentProgress: 0,
       isCompleted: false,
-      rewards: { cash: 100000, points: 50 },
+      rewards: { cash: 100000, points: 50, xp: 8000 },
     },
     {
       type: "career",
@@ -1250,7 +1250,7 @@ export function generateCareerAchievements(): Achievement[] {
       targetValue: 500,
       currentProgress: 0,
       isCompleted: false,
-      rewards: { cash: 500000, points: 150 },
+      rewards: { cash: 500000, points: 150, xp: 20000 },
     },
     {
       type: "career",
@@ -1260,7 +1260,7 @@ export function generateCareerAchievements(): Achievement[] {
       targetValue: 1000,
       currentProgress: 0,
       isCompleted: false,
-      rewards: { cash: 1000000, points: 300 },
+      rewards: { cash: 1000000, points: 300, xp: 50000 },
     },
     {
       type: "career",
@@ -1270,7 +1270,7 @@ export function generateCareerAchievements(): Achievement[] {
       targetValue: 5,
       currentProgress: 0,
       isCompleted: false,
-      rewards: { cash: 50000, points: 20 },
+      rewards: { cash: 50000, points: 20, xp: 2000 },
     },
     {
       type: "career",
@@ -1280,7 +1280,7 @@ export function generateCareerAchievements(): Achievement[] {
       targetValue: 10,
       currentProgress: 0,
       isCompleted: false,
-      rewards: { cash: 100000, points: 50 },
+      rewards: { cash: 100000, points: 50, xp: 5000 },
     },
     {
       type: "career",
@@ -1290,7 +1290,7 @@ export function generateCareerAchievements(): Achievement[] {
       targetValue: 25,
       currentProgress: 0,
       isCompleted: false,
-      rewards: { cash: 250000, points: 100 },
+      rewards: { cash: 250000, points: 100, xp: 15000 },
     },
     {
       type: "career",
@@ -1300,7 +1300,7 @@ export function generateCareerAchievements(): Achievement[] {
       targetValue: 10,
       currentProgress: 0,
       isCompleted: false,
-      rewards: { cash: 25000, points: 15 },
+      rewards: { cash: 25000, points: 15, xp: 0 },
     },
     {
       type: "career",
@@ -1310,7 +1310,7 @@ export function generateCareerAchievements(): Achievement[] {
       targetValue: 25,
       currentProgress: 0,
       isCompleted: false,
-      rewards: { cash: 100000, points: 50 },
+      rewards: { cash: 100000, points: 50, xp: 0 },
     },
     {
       type: "career",
@@ -1320,7 +1320,7 @@ export function generateCareerAchievements(): Achievement[] {
       targetValue: 50,
       currentProgress: 0,
       isCompleted: false,
-      rewards: { cash: 500000, points: 200 },
+      rewards: { cash: 500000, points: 200, xp: 0 },
     },
     {
       type: "career",
@@ -1330,7 +1330,7 @@ export function generateCareerAchievements(): Achievement[] {
       targetValue: 100,
       currentProgress: 0,
       isCompleted: false,
-      rewards: { cash: 150000, points: 60 },
+      rewards: { cash: 150000, points: 60, xp: 10000 },
     },
     {
       type: "career",
@@ -1340,7 +1340,7 @@ export function generateCareerAchievements(): Achievement[] {
       targetValue: 50,
       currentProgress: 0,
       isCompleted: false,
-      rewards: { cash: 100000, points: 50 },
+      rewards: { cash: 100000, points: 50, xp: 8000 },
     },
     {
       type: "career",
@@ -1350,7 +1350,7 @@ export function generateCareerAchievements(): Achievement[] {
       targetValue: 10000,
       currentProgress: 0,
       isCompleted: false,
-      rewards: { cash: 200000, points: 75 },
+      rewards: { cash: 200000, points: 75, xp: 12000 },
     },
     {
       type: "career",
@@ -1360,7 +1360,7 @@ export function generateCareerAchievements(): Achievement[] {
       targetValue: 10,
       currentProgress: 0,
       isCompleted: false,
-      rewards: { cash: 50000, points: 30 },
+      rewards: { cash: 50000, points: 30, xp: 0 },
     },
     {
       type: "career",
@@ -1370,7 +1370,7 @@ export function generateCareerAchievements(): Achievement[] {
       targetValue: 1,
       currentProgress: 0,
       isCompleted: false,
-      rewards: { cash: 100000, points: 50 },
+      rewards: { cash: 100000, points: 50, xp: 0 },
     },
     {
       type: "career",
@@ -1380,7 +1380,7 @@ export function generateCareerAchievements(): Achievement[] {
       targetValue: 50,
       currentProgress: 0,
       isCompleted: false,
-      rewards: { cash: 100000, points: 40 },
+      rewards: { cash: 100000, points: 40, xp: 7000 },
     },
     {
       type: "career",
@@ -1390,7 +1390,7 @@ export function generateCareerAchievements(): Achievement[] {
       targetValue: 30,
       currentProgress: 0,
       isCompleted: false,
-      rewards: { cash: 120000, points: 50 },
+      rewards: { cash: 120000, points: 50, xp: 8000 },
     },
   ];
   
@@ -1415,7 +1415,7 @@ export function generateEventAchievements(): Achievement[] {
       targetValue: 5,
       currentProgress: 0,
       isCompleted: false,
-      rewards: { cash: 7500, points: 5 },
+      rewards: { cash: 7500, points: 5, xp: 500 },
       expiresAt: alphaEndDate,
     },
     {
@@ -1426,7 +1426,7 @@ export function generateEventAchievements(): Achievement[] {
       targetValue: 15,
       currentProgress: 0,
       isCompleted: false,
-      rewards: { cash: 10000, points: 0 },
+      rewards: { cash: 10000, points: 0, xp: 1000 },
       expiresAt: alphaEndDate,
     },
     {
@@ -1437,7 +1437,7 @@ export function generateEventAchievements(): Achievement[] {
       targetValue: 5,
       currentProgress: 0,
       isCompleted: false,
-      rewards: { cash: 15000, points: 0 },
+      rewards: { cash: 15000, points: 0, xp: 800 },
       expiresAt: alphaEndDate,
     },
     {
@@ -1448,7 +1448,7 @@ export function generateEventAchievements(): Achievement[] {
       targetValue: 250,
       currentProgress: 0,
       isCompleted: false,
-      rewards: { cash: 500000, points: 200 },
+      rewards: { cash: 500000, points: 200, xp: 50000 },
       expiresAt: alphaEndDate,
     },
   ];
