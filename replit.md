@@ -4,6 +4,20 @@ A comprehensive railroad management game built with React, Firebase, and TypeScr
 
 ## Recent Changes
 
+**October 27, 2025 (Latest):**
+- ✅ **Increased starting cash from $500k to $1.5 million** for better early game experience
+- ✅ **Implemented comprehensive stock system** for locomotive dealership
+  - Main dealership stock: 0-17 units randomly per locomotive model
+  - Loaner trains: Each unit is unique with stock=1 (removed after purchase)
+  - Stock refreshes every 30 minutes with job refresh (XX:00 and XX:30)
+  - Stock displayed in shop UI with availability badges
+  - Purchase validation enforces stock limits
+  - Stock automatically decrements after successful purchases
+- ✅ **Added XP rewards to achievement system** alongside cash and points
+  - Some achievements now grant XP in addition to monetary rewards
+  - Achievement UI displays all three reward types when applicable
+  - Claiming achievements properly awards XP to player stats
+  
 **October 27, 2025:**
 - ✅ Implemented comprehensive achievement progress tracking on job completion
   - Tracks job count achievements (total jobs, job type specific, freight type specific)
@@ -58,13 +72,15 @@ A comprehensive railroad management game built with React, Firebase, and TypeScr
     createdAt: number
   },
   stats: {
-    cash: number (starts at $500,000),
+    cash: number (starts at $1,500,000),
     xp: number,
     level: number,
     nextLocoId: number (for automatic numbering)
   },
   locomotives: Locomotive[],
-  jobs: Job[]
+  jobs: Job[],
+  dealershipStock: DealershipStock[] (0-17 units per model, refreshes every 30 min),
+  loanerTrains: LoanerTrain[] (unique units, removed after purchase)
 }
 ```
 
@@ -82,6 +98,8 @@ A comprehensive railroad management game built with React, Firebase, and TypeScr
 - Full stat tracking (HP, speed, weight, reliability, etc.)
 - Buy, sell, or scrap options
 - Status: available or assigned to jobs
+- **Stock system**: Main dealership has 0-17 units per model (refreshes every 30 min)
+- **Loaner trains**: Pre-owned locomotives, each unique unit available once
 
 **Job System:**
 - Three tiers:
@@ -97,6 +115,7 @@ A comprehensive railroad management game built with React, Firebase, and TypeScr
 - Completing jobs earns cash and XP
 - **Auto-refresh system**: Jobs refresh every 30 minutes (at XX:00 and XX:30)
   - Only available jobs refresh; ongoing jobs (with assigned locomotives) are preserved
+  - Dealership stock also refreshes on the same 30-minute cadence
 - **Detailed manifests**: Each job includes breakdown of car types, contents, and weights
 - **Current Jobs tab**: Track ongoing jobs with real-time progress indicators
 
@@ -172,7 +191,11 @@ shared/
 ✅ XP and leveling system
 ✅ Level-up notifications with unlock display
 ✅ Shop with tier-based locomotive catalog
+✅ Dynamic stock system (0-17 units per model)
+✅ Stock refreshes every 30 minutes with job market
+✅ Stock availability displayed with badges
 ✅ Buy/sell/scrap locomotive options
+✅ Loaner trains with unique pre-owned units
 ✅ News feed for updates
 ✅ Responsive dark-themed UI
 
@@ -185,15 +208,16 @@ Required Firebase secrets (already configured):
 
 ## Future Enhancements
 
+- Display time-to-refresh countdown for stock/jobs
 - Livery customization system
 - Locomotive degradation (mileage, paint condition)
 - Maintenance and repair mechanics
 - Dynamic job generation based on player level
-- Achievement system
 - Company statistics dashboard
 - Real-time job completion countdown
 - Multiple save slots
 - Leaderboards
+- Automated test coverage for stock and purchase flows
 
 ## Firebase Security Rules
 
