@@ -4,6 +4,16 @@ A comprehensive railroad management game built with React, Firebase, and TypeScr
 
 ## Recent Changes
 
+**October 27, 2025:**
+- ✅ Implemented comprehensive achievement progress tracking on job completion
+  - Tracks job count achievements (total jobs, job type specific, freight type specific)
+  - Tracks distance-based achievements (total miles traveled)
+  - Tracks value-based achievements (cash balance, player level, locomotives owned)
+  - All achievement updates handled atomically within job completion transaction
+- ✅ Updated alpha achievement to remove livery reward mention (cash/points only)
+- ✅ Fixed self-healing stats system to properly initialize missing player stats fields
+- ✅ Fixed shop bulk purchases to correctly increment locomotive unit numbers using field-path updates
+
 **October 22, 2025:**
 - ✅ Added dedicated Cash stat card to dashboard for clear visibility of actual cash balance
 - ✅ Fixed shop purchase validation to use correct stats.cash field
