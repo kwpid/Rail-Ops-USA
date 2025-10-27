@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
-import { LOCOMOTIVE_CATALOG, type LocomotiveCatalogItem, generateUsedLocomotive, type UsedLocomotiveItem } from "@shared/schema";
+import { LOCOMOTIVE_CATALOG, type LocomotiveCatalogItem, generateUsedLocomotive, type UsedLocomotiveItem, type DealershipStock, generateDealershipStock } from "@shared/schema";
 import { Zap, TrendingUp, Gauge, Weight, DollarSign, Search, Filter, Fuel, Tag, Activity } from "lucide-react";
 import { doc } from "firebase/firestore";
 import { getDbOrThrow, safeUpdateDoc } from "@/lib/firebase";
@@ -39,6 +39,12 @@ export default function Shop() {
     totalJobsCompleted: 0,
   };
   const company = playerData.company;
+  const dealershipStock = playerData.dealershipStock || [];
+
+  const getStock = (model: string): number => {
+    const stockItem = dealershipStock.find(s => s.model === model);
+    return stockItem ? stockItem.stock : 0;
+  };
 
   const filteredAndSortedLocos = useMemo(() => {
     let filtered = LOCOMOTIVE_CATALOG.filter((loco) => {
@@ -82,6 +88,16 @@ export default function Shop() {
 
   const handlePurchase = async (catalogItem: LocomotiveCatalogItem, quantity: number) => {
     const totalCost = catalogItem.purchaseCost * quantity;
+    const currentStock = getStock(catalogItem.model);
+    
+    if (currentStock < quantity) {
+      toast({
+        title: "Insufficient Stock",
+        description: `Only ${currentStock} ${catalogItem.model}${currentStock !== 1 ? 's' : ''} available in stock.`,
+        variant: "destructive",
+      });
+      return;
+    }
     
     if (stats.cash < totalCost) {
       toast({
@@ -137,10 +153,18 @@ export default function Shop() {
         nextId++;
       }
 
+      // Update dealership stock by decrementing the quantity purchased
+      const updatedStock = dealershipStock.map(item => 
+        item.model === catalogItem.model 
+          ? { ...item, stock: Math.max(0, item.stock - quantity) }
+          : item
+      );
+
       await safeUpdateDoc(playerRef, {
         locomotives: [...playerData.locomotives, ...newLocos],
         "stats.cash": stats.cash - totalCost,
         "stats.nextLocoId": nextId,
+        dealershipStock: updatedStock,
       });
 
       await refreshPlayerData();
@@ -317,13 +341,21 @@ export default function Shop() {
                   <span>{loco.reliability}%</span>
                 </div>
               </div>
-              <div className="flex items-center justify-between pt-2 border-t">
-                <span className="text-xl font-bold">
-                  ${loco.purchaseCost.toLocaleString()}
-                </span>
-                <Badge variant={canAfford(loco.purchaseCost) ? "default" : "secondary"}>
-                  {canAfford(loco.purchaseCost) ? "Can Afford" : "Too Expensive"}
-                </Badge>
+              <div className="flex flex-col gap-2 pt-2 border-t">
+                <div className="flex items-center justify-between">
+                  <span className="text-xl font-bold">
+                    ${loco.purchaseCost.toLocaleString()}
+                  </span>
+                  <Badge variant={canAfford(loco.purchaseCost) ? "default" : "secondary"}>
+                    {canAfford(loco.purchaseCost) ? "Can Afford" : "Too Expensive"}
+                  </Badge>
+                </div>
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-muted-foreground">Stock:</span>
+                  <Badge variant={getStock(loco.model) > 0 ? "outline" : "destructive"}>
+                    {getStock(loco.model)} available
+                  </Badge>
+                </div>
               </div>
             </CardContent>
           </Card>

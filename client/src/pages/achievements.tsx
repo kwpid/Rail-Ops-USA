@@ -5,7 +5,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Trophy, Calendar, Target, Gift, Coins, DollarSign, CheckCircle2, Lock } from "lucide-react";
+import { Trophy, Calendar, Target, Gift, Coins, DollarSign, CheckCircle2, Lock, Star } from "lucide-react";
 import { doc, runTransaction, increment } from "firebase/firestore";
 import { getDbOrThrow, safeUpdateDoc } from "@/lib/firebase";
 import { useToast } from "@/hooks/use-toast";
@@ -57,17 +57,23 @@ export default function AchievementsPage() {
             : a
         );
 
-        // Update with increments for points/cash
+        // Update with increments for points/cash/xp
         transaction.update(playerDocRef, {
           achievements: updatedAchievements,
           "stats.points": increment(achievement.rewards.points),
           "stats.cash": increment(achievement.rewards.cash),
+          "stats.xp": increment(achievement.rewards.xp || 0),
         });
       });
 
+      const rewards: string[] = [];
+      if (achievement.rewards.cash > 0) rewards.push(`$${achievement.rewards.cash.toLocaleString()}`);
+      if (achievement.rewards.points > 0) rewards.push(`${achievement.rewards.points} points`);
+      if (achievement.rewards.xp > 0) rewards.push(`${achievement.rewards.xp} XP`);
+
       toast({
         title: "🎉 Achievement Completed!",
-        description: `You earned ${achievement.rewards.cash > 0 ? `$${achievement.rewards.cash.toLocaleString()}` : ''} ${achievement.rewards.cash > 0 && achievement.rewards.points > 0 ? ' and ' : ''}${achievement.rewards.points > 0 ? `${achievement.rewards.points} points` : ''}`,
+        description: `You earned ${rewards.join(', ')}`,
       });
     } catch (error) {
       console.error("Error claiming reward:", error);
@@ -141,6 +147,12 @@ export default function AchievementsPage() {
                   <div className="flex items-center gap-1 text-amber-600 dark:text-amber-400" data-testid={`reward-points-${achievement.id}`}>
                     <Coins className="h-4 w-4" />
                     {achievement.rewards.points} points
+                  </div>
+                )}
+                {achievement.rewards.xp > 0 && (
+                  <div className="flex items-center gap-1 text-blue-600 dark:text-blue-400" data-testid={`reward-xp-${achievement.id}`}>
+                    <Star className="h-4 w-4" />
+                    {achievement.rewards.xp} XP
                   </div>
                 )}
               </div>

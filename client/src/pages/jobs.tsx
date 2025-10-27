@@ -11,7 +11,7 @@ import { useToast } from "@/hooks/use-toast";
 import { MapPin, Package, Zap, DollarSign, Clock, Star, Lock, ArrowRight, TrendingUp, TrendingDown, Minus, PackageOpen, RefreshCw } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
 import type { Job, CarManifest } from "@shared/schema";
-import { FREIGHT_TYPES, generateLoanerTrainMarket } from "@shared/schema";
+import { FREIGHT_TYPES, generateLoanerTrainMarket, generateDealershipStock } from "@shared/schema";
 import { doc, deleteField, runTransaction, increment } from "firebase/firestore";
 import { getDbOrThrow, safeUpdateDoc } from "@/lib/firebase";
 import { calculateLevel, getXpForNextLevel } from "@shared/schema";
@@ -320,6 +320,11 @@ export default function Jobs() {
         updates.loanerTrainsRefreshAt = nextRefreshTimestamp;
       }
       
+      // Initialize dealership stock if none exist
+      if (!playerData.dealershipStock || playerData.dealershipStock.length === 0) {
+        updates.dealershipStock = generateDealershipStock();
+      }
+      
       // Only update if we have changes
       if (Object.keys(updates).length > 0) {
         try {
@@ -372,10 +377,14 @@ export default function Jobs() {
       try {
         const db = getDbOrThrow();
         const playerRef = doc(db, "players", user.uid);
+        // Also refresh dealership stock (0-17 per model)
+        const newDealershipStock = generateDealershipStock();
+
         await safeUpdateDoc(playerRef, {
           jobs: [...ongoingJobs, ...tier1, ...tier2, ...tier3],
           loanerTrains: newLoanerTrains,
           loanerTrainsRefreshAt: nextRefreshTimestamp,
+          dealershipStock: newDealershipStock,
         });
         
         toast({
