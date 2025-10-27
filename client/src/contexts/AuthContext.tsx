@@ -6,7 +6,7 @@ import {
   type User as FirebaseUser,
 } from "firebase/auth";
 import { doc, getDoc, setDoc, onSnapshot } from "firebase/firestore";
-import { getAuthOrThrow, getGoogleProviderOrThrow, getDbOrThrow, firebaseConfigured } from "@/lib/firebase";
+import { getAuthOrThrow, getGoogleProviderOrThrow, getDbOrThrow, firebaseConfigured, safeUpdateDoc } from "@/lib/firebase";
 import type { PlayerData, Achievement } from "@shared/schema";
 import { generateWeeklyAchievements, generateCareerAchievements, generateEventAchievements, SPECIAL_LIVERIES_CATALOG, getNextFriday, shouldRefreshWeeklyAchievements } from "@shared/schema";
 
@@ -145,10 +145,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     const db = getDbOrThrow();
     const docRef = doc(db, "players", user.uid);
-    const unsubscribe = onSnapshot(docRef, (docSnap) => {
+    const unsubscribe = onSnapshot(docRef, async (docSnap) => {
       if (docSnap.exists()) {
         const rawData = docSnap.data();
         const normalizedData = normalizePlayerData(rawData, user.uid);
+        
+        const needsStatsUpdate = !rawData.stats || 
+          rawData.stats.cash === undefined ||
+          rawData.stats.xp === undefined ||
+          rawData.stats.level === undefined ||
+          rawData.stats.nextLocoId === undefined ||
+          rawData.stats.points === undefined ||
+          rawData.stats.totalJobsCompleted === undefined;
+
+        if (needsStatsUpdate) {
+          try {
+            await safeUpdateDoc(docRef, {
+              stats: normalizedData.stats,
+            });
+          } catch (error) {
+            console.error("Failed to update missing stats:", error);
+          }
+        }
+        
         setPlayerData(normalizedData);
       } else {
         setPlayerData(null);
