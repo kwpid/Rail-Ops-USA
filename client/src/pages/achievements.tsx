@@ -53,7 +53,7 @@ export default function AchievementsPage() {
         const currentData = playerDoc.data();
         const updatedAchievements = (currentData.achievements || []).map((a: any) => 
           a.id === achievement.id 
-            ? { ...a, isCompleted: true, completedAt: Date.now() }
+            ? { ...a, isCompleted: true, completedAt: Date.now(), currentProgress: a.currentProgress ?? 0 }
             : a
         );
 

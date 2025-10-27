@@ -1046,6 +1046,7 @@ export function generateLoanerTrain(catalogItem: LocomotiveCatalogItem): LoanerT
     paintCondition: Math.round(paintCondition),
     previousOwner,
     previousOwnerColors,
+    stock: 1,
   };
 }
 
@@ -1061,7 +1062,7 @@ export function generateLoanerTrainMarket(count?: number): LoanerTrain[] {
     const randomIndex = Math.floor(Math.random() * availableCatalog.length);
     const catalogItem = availableCatalog.splice(randomIndex, 1)[0];
     const loaner = generateLoanerTrain(catalogItem);
-    loanerTrains.push({ ...loaner, stock: 1 });
+    loanerTrains.push(loaner);
   }
   
   // Sort by price (cheapest first)
